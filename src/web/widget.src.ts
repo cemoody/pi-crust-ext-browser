@@ -221,20 +221,22 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     }
   };
 
-  // --- Soft + hardware keyboard: forwarded from the hidden textarea.
+  // --- Keyboard, forwarded from the hidden textarea. Hardware keyboards deliver
+  // every key via keydown (incl. printable chars); we forward those directly and
+  // preventDefault so the textarea stays empty and no duplicate beforeinput fires.
+  // Mobile soft keyboards often send keydown key="Unidentified" and deliver the
+  // real text via beforeinput/IME — handled below.
   const onKbKeyDown = (ev: any) => {
-    if (ev.key && ev.key.length > 1) { // named keys (Enter, Backspace, Arrow*, Tab, Esc)
-      send({ kind: 'key', type: 'keyDown', key: ev.key, code: ev.code });
-      if (['Backspace', 'Tab', 'Enter', 'ArrowUp', 'ArrowDown'].includes(ev.key)) ev.preventDefault();
-    } else if (ev.key && (ev.ctrlKey || ev.metaKey)) {
-      send({ kind: 'key', type: 'keyDown', key: ev.key, code: ev.code, modifiers: { ctrl: ev.ctrlKey, meta: ev.metaKey, shift: ev.shiftKey, alt: ev.altKey } });
-    }
+    const k = ev.key;
+    if (!k || k === 'Unidentified') return; // composition/IME → beforeinput handles it
+    send({ kind: 'key', type: 'keyDown', key: k, code: ev.code, modifiers: { shift: ev.shiftKey, ctrl: ev.ctrlKey, alt: ev.altKey, meta: ev.metaKey } });
+    ev.preventDefault();
   };
-  const onKbKeyUp = (ev: any) => { if (ev.key && ev.key.length > 1) send({ kind: 'key', type: 'keyUp', key: ev.key, code: ev.code }); };
-  // beforeinput carries soft-keyboard text/IME on mobile (keydown often lacks it).
+  const onKbKeyUp = (ev: any) => { const k = ev.key; if (k && k !== 'Unidentified') send({ kind: 'key', type: 'keyUp', key: k, code: ev.code }); };
+  // beforeinput carries soft-keyboard text/IME on mobile (keydown lacks the char).
   const onKbBeforeInput = (ev: any) => {
     const t = ev.inputType;
-    if (t === 'insertText' && ev.data) { send({ kind: 'text', text: ev.data }); ev.preventDefault(); }
+    if ((t === 'insertText' || t === 'insertCompositionText') && ev.data) { send({ kind: 'text', text: ev.data }); ev.preventDefault(); }
     else if (t === 'insertLineBreak' || t === 'insertParagraph') { send({ kind: 'key', type: 'keyDown', key: 'Enter' }); send({ kind: 'key', type: 'keyUp', key: 'Enter' }); ev.preventDefault(); }
     else if (t === 'deleteContentBackward') { send({ kind: 'key', type: 'keyDown', key: 'Backspace' }); send({ kind: 'key', type: 'keyUp', key: 'Backspace' }); ev.preventDefault(); }
   };

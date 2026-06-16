@@ -115,6 +115,14 @@ describe('widget (React/DOM)', () => {
     expect(key?.payload).toMatchObject({ browserId: 'br-1', type: 'keyDown', key: 'Enter' });
   });
 
+  it('keyboard: typing a printable character forwards a key event (with the char)', async () => {
+    await renderWidget(apiWithSession);
+    const kb = container.querySelector('textarea')!;
+    await act(async () => { kb.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', code: 'KeyH', bubbles: true })); });
+    const key = fakeSocket.emitted.find((e: any) => e.event === 'browser:input' && e.payload.kind === 'key' && e.payload.key === 'h');
+    expect(key?.payload).toMatchObject({ browserId: 'br-1', type: 'keyDown', key: 'h' });
+  });
+
   it('keyboard button focuses the hidden textarea (raises the soft keyboard)', async () => {
     await renderWidget(apiWithSession);
     const kbBtn = Array.from(container.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === 'Keyboard')!;
