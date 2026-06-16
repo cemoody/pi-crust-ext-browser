@@ -13,6 +13,7 @@ const cfg = (window as any).__PI_BROWSER_CARD__ as { sessionId: string; token: s
 const canvas = document.getElementById('c') as HTMLCanvasElement | null;
 const dot = document.getElementById('dot');
 const u = document.getElementById('u');
+const doneBtn = document.getElementById('done') as HTMLButtonElement | null;
 
 async function main() {
   if (!cfg || !canvas) return;
@@ -48,6 +49,19 @@ async function main() {
     if (u) u.textContent = 'connection failed';
     return;
   }
+
+  // "I'm done — resume": unblock the assistant's browser_wait_for_human.
+  doneBtn?.addEventListener('click', () => {
+    if (!browserId) return;
+    doneBtn.disabled = true;
+    doneBtn.textContent = 'resuming\u2026';
+    void transport.resume(browserId).then(() => {
+      doneBtn.textContent = '\u2713 resumed';
+    }).catch(() => {
+      doneBtn.disabled = false;
+      doneBtn.textContent = '\u2713 I\u2019m done \u2014 resume';
+    });
+  });
 
   const toPage = (ev: MouseEvent) => {
     const r = canvas.getBoundingClientRect();

@@ -50,6 +50,10 @@ export default function activate(prc: any): void {
   const factory = createPlaywrightCdpFactory({
     ...(process.env.PI_CRUST_BROWSER_CDP_URL ? { cdpUrl: process.env.PI_CRUST_BROWSER_CDP_URL } : {}),
     ...(profileBase ? { profileDir: profileBase } : {}),
+    // Share ONE profile across sessions by default so a sign-in in any session
+    // is reused everywhere. Set PI_CRUST_BROWSER_SHARED_PROFILE=0 for isolated
+    // per-session profiles.
+    sharedProfile: process.env.PI_CRUST_BROWSER_SHARED_PROFILE !== '0',
     // Headless by default (streams the same; needs no display). Opt into a
     // visible window with PI_CRUST_BROWSER_HEADLESS=0 (requires an X display).
     launch: { headless: process.env.PI_CRUST_BROWSER_HEADLESS !== '0' },

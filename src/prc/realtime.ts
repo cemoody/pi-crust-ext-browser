@@ -134,6 +134,14 @@ export function makeBrowserConnectionHandler(
       if (browserId) pacers.get(browserId)?.ack();
     });
 
+    // Human clicked "Done — I've signed in": unblock browser_wait_for_human.
+    conn.on('browser:resume', (payload, cb) => {
+      const browserId = str(rec(payload).browserId);
+      if (!browserId || !owned.has(browserId)) { ack(cb, { ok: false, error: 'not attached to that browser' }); return; }
+      try { const r = service.resume(browserId); ack(cb, { ok: true, resumed: r.resumed }); }
+      catch (e) { ack(cb, { ok: false, error: errOf(e) }); }
+    });
+
     conn.on('browser:input', (payload, cb) => {
       void (async () => {
         const p = rec(payload);

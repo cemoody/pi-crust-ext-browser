@@ -56,6 +56,17 @@ describe('browser:* gateway', () => {
     expect(ack).toMatchObject({ ok: false });
   });
 
+  it('HOFF-3 (wire): browser:resume acks ok for an attached browser, and is rejected for an unowned one', async () => {
+    const { handler } = setup();
+    const conn = new FakeRealtimeConnection('sock-A');
+    handler(conn);
+    expect(await conn.send('browser:resume', { browserId: 'br-stranger' })).toMatchObject({ ok: false });
+    const ack = await conn.send('browser:attach', { sessionId: 'pi-1', token: 'good' });
+    const resumed = await conn.send('browser:resume', { browserId: (ack as any).browserId });
+    expect(resumed).toMatchObject({ ok: true });
+    expect(typeof (resumed as any).resumed).toBe('boolean');
+  });
+
   it('MUX-2 (wire): two sockets on two sessions never receive each other’s frames', async () => {
     const { handler, cdpFactory } = setup();
     const a = new FakeRealtimeConnection('sock-A');

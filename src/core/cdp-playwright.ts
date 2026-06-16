@@ -107,6 +107,11 @@ export interface PlaywrightCdpFactoryOptions {
    *  When set (and launching locally), each pi session gets a profile at
    *  <profileDir>/<sessionId> that survives restarts. Omit for ephemeral. */
   readonly profileDir?: string;
+  /** Share ONE profile across all pi sessions, so a login in any session is
+   *  reused everywhere (profile lives at <profileDir>/_shared). Chrome locks a
+   *  user-data-dir, so only one session can hold it at a time; if it's locked
+   *  we transparently fall back to a per-session profile. Default true. */
+  readonly sharedProfile?: boolean;
 }
 
 /**
@@ -158,8 +163,18 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
       } else if (opts.profileDir) {
         const nodePath = (await import('node:path' as string)).default ?? (await import('node:path' as string));
         const safe = _piSessionId.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const userDataDir = nodePath.join(opts.profileDir, safe);
-        context = await chromium.launchPersistentContext(userDataDir, launchOpts);
+        const shared = opts.sharedProfile !== false;
+        const sharedDir = nodePath.join(opts.profileDir, '_shared');
+        const perSessionDir = nodePath.join(opts.profileDir, safe);
+        try {
+          // Prefer the shared profile so logins carry across sessions.
+          context = await chromium.launchPersistentContext(shared ? sharedDir : perSessionDir, launchOpts);
+        } catch (e) {
+          // Shared dir is locked by another live session (Chrome single-writer).
+          // Fall back to a per-session profile so this session still works.
+          if (!shared) throw e;
+          context = await chromium.launchPersistentContext(perSessionDir, launchOpts);
+        }
         browser = context.browser();
         persistent = true;
       } else {

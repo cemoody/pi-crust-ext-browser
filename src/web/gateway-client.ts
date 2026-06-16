@@ -26,6 +26,8 @@ export interface BrowserGatewayTransport {
   resize(browserId: string, viewport: Viewport): void;
   /** Tell the server this client has drawn the current frame (adaptive pacing). */
   frameDone(browserId: string): void;
+  /** Human clicked "Done" — unblock a pending browser_wait_for_human (HOFF-3). */
+  resume(browserId: string): Promise<{ resumed: boolean }>;
   detach(browserId: string): void;
   onFrame(cb: (f: FrameEnvelope) => void): () => void;
   onMeta(cb: (m: MetaEnvelope) => void): () => void;
@@ -69,6 +71,10 @@ export function createGatewayTransport(socket: GatewaySocket, opts?: { ackTimeou
     },
     frameDone(browserId) {
       socket.emit('browser:frame_ack', { browserId });
+    },
+    async resume(browserId) {
+      const ack = await emitWithAck('browser:resume', { browserId });
+      return { resumed: !!ack?.resumed };
     },
     input(browserId, event) {
       if (coalescer) { currentBrowserId = browserId; coalescer.push(event); return; }
