@@ -53,6 +53,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   const browserIdRef = useRef(null);
   const [status, setStatus] = useState('connecting');
   const [url, setUrl] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [awaiting, setAwaiting] = useState(null);
   const [maximized, setMaximized] = useState(false);
   const sessionIdRef = useRef(null);
@@ -87,9 +88,13 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
           browserId = r.browserId;
           browserIdRef.current = r.browserId;
           setStatus('live');
-        } catch { if (!disposed) setStatus('error'); }
+          setErrorMsg('');
+        } catch (e: any) {
+          if (!disposed) { setStatus('error'); setErrorMsg(String(e?.message ?? e)); }
+        }
       };
       (socket as any).on?.('connect', doAttach);
+      (socket as any).on?.('connect_error', (e: any) => { if (!disposed) { setStatus('error'); setErrorMsg('gateway connect failed: ' + String(e?.message ?? e)); } });
 
       transport.onFrame((f) => {
         if (!canvas || !ctx) return;
@@ -166,6 +171,11 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     awaiting ? React.createElement('div', { 'data-testid': 'awaiting-banner', role: 'alert', style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#3a2f00', color: '#ffd', font: '12px system-ui' } },
       React.createElement('span', null, `🔐 Agent is waiting — ${(awaiting as any).reason}`),
       React.createElement('button', { onClick: resume, style: { cursor: 'pointer' } }, 'Done — resume'),
+    ) : null,
+    status === 'error' ? React.createElement('div', { 'data-testid': 'error-banner', role: 'alert', style: { flex: '0 0 auto', padding: '10px 12px', background: '#3a0000', color: '#fdd', font: '12px system-ui', lineHeight: 1.5 } },
+      React.createElement('div', { style: { fontWeight: 600 } }, '⚠️ Could not start the browser'),
+      errorMsg ? React.createElement('div', { style: { opacity: 0.85, fontFamily: 'ui-monospace, monospace', marginTop: 4, whiteSpace: 'pre-wrap' } }, errorMsg) : null,
+      React.createElement('div', { style: { opacity: 0.75, marginTop: 6 } }, 'Set PI_CRUST_BROWSER_CDP_URL to a Chrome debug endpoint (e.g. ws://127.0.0.1:9222/), or run `npx playwright install chromium` on the host, then restart pi-crust.'),
     ) : null,
     React.createElement('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' } },
       React.createElement('canvas', {

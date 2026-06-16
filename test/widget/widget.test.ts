@@ -108,6 +108,18 @@ describe('widget (React/DOM)', () => {
     root = createRoot(container);
   });
 
+  it('error: a failed attach shows the error banner with the message', async () => {
+    fakeSocket.emit = function (e: string, p: any, ack?: (r: any) => void) {
+      this.emitted.push({ event: e, payload: p });
+      if (e === 'browser:attach' && ack) ack({ ok: false, error: "Executable doesn't exist" });
+    };
+    await renderWidget(apiWithSession);
+    const banner = container.querySelector('[data-testid=error-banner]');
+    expect(banner).toBeTruthy();
+    expect(banner!.textContent).toContain("Executable doesn't exist");
+    expect(banner!.textContent).toContain('PI_CRUST_BROWSER_CDP_URL');
+  });
+
   it('no-session: with no sessions, shows the no-session state and never attaches', async () => {
     await renderWidget({ listSessions: async () => [] });
     expect(fakeSocket.emitted.some((e: any) => e.event === 'browser:attach')).toBe(false);
