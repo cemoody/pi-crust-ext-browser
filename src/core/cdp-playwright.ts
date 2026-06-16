@@ -103,6 +103,10 @@ export interface PlaywrightCdpFactoryOptions {
   readonly cdpUrl?: string;
   /** Otherwise launch a (headful, Xvfb) Chromium. */
   readonly launch?: { headless?: boolean };
+  /** Base dir for persistent per-session browser profiles (cookies/logins).
+   *  When set (and launching locally), each pi session gets a profile at
+   *  <profileDir>/<sessionId> that survives restarts. Omit for ephemeral. */
+  readonly profileDir?: string;
 }
 
 /**
@@ -137,15 +141,31 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
         catch { return await import('playwright' as string); }
       };
       const { chromium } = (await load()) as any;
-      const browser = opts.cdpUrl
-        ? await chromium.connectOverCDP(opts.cdpUrl)
-        : await chromium.launch({
-            headless: opts.launch?.headless ?? true,
-            args: ['--disable-blink-features=AutomationControlled'],
-            ignoreDefaultArgs: ['--enable-automation'],
-          });
+      const launchOpts = {
+        headless: opts.launch?.headless ?? true,
+        args: ['--disable-blink-features=AutomationControlled'],
+        ignoreDefaultArgs: ['--enable-automation'],
+      };
 
-      const context = browser.contexts()[0] ?? (await browser.newContext());
+      // browser is null for a persistent context; persistent === we own a
+      // user-data-dir on disk that keeps cookies/logins across restarts.
+      let browser: any = null;
+      let context: any;
+      let persistent = false;
+      if (opts.cdpUrl) {
+        browser = await chromium.connectOverCDP(opts.cdpUrl);
+        context = browser.contexts()[0] ?? (await browser.newContext());
+      } else if (opts.profileDir) {
+        const nodePath = (await import('node:path' as string)).default ?? (await import('node:path' as string));
+        const safe = _piSessionId.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const userDataDir = nodePath.join(opts.profileDir, safe);
+        context = await chromium.launchPersistentContext(userDataDir, launchOpts);
+        browser = context.browser();
+        persistent = true;
+      } else {
+        browser = await chromium.launch(launchOpts);
+        context = browser.contexts()[0] ?? (await browser.newContext());
+      }
       // Inject stealth patches into every page/frame before site scripts run.
       try { await context.addInitScript({ content: STEALTH_SCRIPT }); } catch { /* connected contexts may not allow it */ }
       const ensurePage = async () => context.pages()[0] ?? (await context.newPage());
@@ -155,7 +175,7 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
       const targetHandlers = new Set<() => void>();
       let closed = false;
       let raw = await context.newCDPSession(page);
-      browser.on('disconnected', () => { closed = true; });
+      browser?.on?.('disconnected', () => { closed = true; });
       context.on('page', async (p: any) => {
         if (closed) return;
         try { page = p; raw = await context.newCDPSession(page); for (const h of [...targetHandlers]) h(); }
@@ -181,8 +201,11 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
         session: createCdpAdapter(source),
         close: async () => {
           closed = true;
+          // Persistent context: close the context (flushes the profile to disk).
+          // connectOverCDP/launch: close the browser.
           try {
-            await browser.close();
+            if (persistent) await context.close();
+            else await browser.close();
           } catch {
             /* ignore */
           }

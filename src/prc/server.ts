@@ -42,8 +42,14 @@ export default function activate(prc: any): void {
   };
 
   // Remote browser: connect to a configured CDP endpoint, else launch headful.
+  // Persistent per-session browser profiles (cookies/logins survive restarts),
+  // unless disabled. Lives under the config dir by default; override the base
+  // path with PI_CRUST_BROWSER_PROFILE_DIR, or set it to '' to go ephemeral.
+  const profileBase = process.env.PI_CRUST_BROWSER_PROFILE_DIR
+    ?? path.join(prc.configDir ?? path.join(process.env.HOME ?? '.', '.pi-crust'), 'browser-profiles');
   const factory = createPlaywrightCdpFactory({
     ...(process.env.PI_CRUST_BROWSER_CDP_URL ? { cdpUrl: process.env.PI_CRUST_BROWSER_CDP_URL } : {}),
+    ...(profileBase ? { profileDir: profileBase } : {}),
     // Headless by default (streams the same; needs no display). Opt into a
     // visible window with PI_CRUST_BROWSER_HEADLESS=0 (requires an X display).
     launch: { headless: process.env.PI_CRUST_BROWSER_HEADLESS !== '0' },
