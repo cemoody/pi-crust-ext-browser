@@ -114,12 +114,15 @@ function vkFor(key: string): number | undefined {
 /** Map a viewer key input to a CDP Input.dispatchKeyEvent payload. */
 export function keyEventToCdp(input: KeyInput): CdpKeyEvent {
   const isText = input.type === 'keyDown' && input.key.length === 1 && !NAMED_KEYS.has(input.key);
+  // Enter needs text "\r" on keyDown so Chromium fires keypress + the default
+  // action (e.g. implicit form submit); VK alone isn't enough.
+  const text = isText ? input.key : (input.type === 'keyDown' && input.key === 'Enter' ? '\r' : undefined);
   const vk = vkFor(input.key);
   return {
     type: input.type,
     key: input.key,
     ...(input.code ? { code: input.code } : {}),
-    ...(isText ? { text: input.key } : {}),
+    ...(text !== undefined ? { text } : {}),
     ...(vk !== undefined ? { windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk } : {}),
     modifiers: modifierMask(input.modifiers),
   };

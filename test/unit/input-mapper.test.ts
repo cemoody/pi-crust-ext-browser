@@ -52,11 +52,13 @@ describe('input-mapper', () => {
     expect(ev.text).toBe('A');
   });
 
-  it('INP-6: Enter is a non-text special key with a virtual key code', () => {
+  it('INP-6: Enter carries VK 13 and text \\r (so forms submit on Enter)', () => {
     const ev = keyEventToCdp({ kind: 'key', type: 'keyDown', key: 'Enter', code: 'Enter' });
     expect(ev.key).toBe('Enter');
-    expect(ev.text).toBeUndefined();
     expect(ev.windowsVirtualKeyCode).toBe(13);
+    expect(ev.text).toBe('\r');
+    // keyUp Enter has no text
+    expect(keyEventToCdp({ kind: 'key', type: 'keyUp', key: 'Enter' }).text).toBeUndefined();
   });
 
   it('INP-6: Backspace carries its virtual key code (so Chrome performs the delete)', () => {

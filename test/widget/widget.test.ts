@@ -107,6 +107,15 @@ describe('widget (React/DOM)', () => {
     expect(press?.payload).toMatchObject({ browserId: 'br-1', kind: 'mouse', type: 'mousePressed' });
   });
 
+  it('wheel: scrolling over the canvas forwards a mouseWheel input', async () => {
+    await renderWidget(apiWithSession);
+    const canvas = container.querySelector('canvas')!;
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1280, height: 800 }) as any;
+    await act(async () => { canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 300, clientX: 10, clientY: 10, bubbles: true })); });
+    const wheel = fakeSocket.emitted.find((e: any) => e.event === 'browser:input' && e.payload.type === 'mouseWheel');
+    expect(wheel?.payload).toMatchObject({ browserId: 'br-1', kind: 'mouse', type: 'mouseWheel', deltaY: 300 });
+  });
+
   it('keyboard: a key on the hidden textarea forwards a key event to the remote', async () => {
     await renderWidget(apiWithSession);
     const kb = container.querySelector('textarea')!;

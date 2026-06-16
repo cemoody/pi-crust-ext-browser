@@ -324,6 +324,8 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
         ref: canvasRef, width: 1280, height: 800, 'aria-label': 'Remote browser viewport',
         style: { maxWidth: '100%', maxHeight: '100%', background: '#fff', cursor: 'crosshair', boxShadow: '0 0 0 1px #333', touchAction: 'none' },
         onPointerDown: onPointerDown, onPointerMove: onPointerMove, onPointerUp: onPointerUp, onPointerCancel: onPointerUp,
+        // Desktop mouse-wheel scrolling (touch drag-scroll is handled in onPointerMove).
+        onWheel: (e: any) => { const p = toPage(e); send({ kind: 'mouse', type: 'mouseWheel', x: p.x, y: p.y, deltaX: e.deltaX, deltaY: e.deltaY }); },
         // Prevent the (synthesized) mousedown from moving focus off the hidden
         // textarea — that was dismissing the soft keyboard right after it opened.
         onMouseDown: (e: any) => e.preventDefault(),
