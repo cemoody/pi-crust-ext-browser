@@ -2,7 +2,7 @@
  * PERF-1/2, RES-5 — frame pacing + input coalescing. RED until pacing is built.
  */
 import { describe, expect, it } from 'vitest';
-import { createFramePacer, createInputCoalescer } from '../../src/core/pacing.js';
+import { createFramePacer, createInputCoalescer, createQualityController } from '../../src/core/pacing.js';
 
 describe('frame pacer (PERF-1 / RES-5)', () => {
   it('sends the first frame immediately', () => {
@@ -36,6 +36,29 @@ describe('frame pacer (PERF-1 / RES-5)', () => {
     p.offer(1); p.drain();
     p.offer(2);
     expect(out).toEqual([1, 2]);
+  });
+});
+
+describe('adaptive quality controller', () => {
+  it('lowers quality under sustained high round-trip', () => {
+    const c = createQualityController({ startQuality: 75 });
+    let last = c.quality;
+    for (let i = 0; i < 10; i++) { const q = c.sample(800); if (q !== null) last = q; }
+    expect(last).toBeLessThanOrEqual(45);
+    expect(c.quality).toBeLessThanOrEqual(45);
+  });
+
+  it('raises quality under sustained low round-trip', () => {
+    const c = createQualityController({ startQuality: 45 });
+    let last = c.quality;
+    for (let i = 0; i < 12; i++) { const q = c.sample(20); if (q !== null) last = q; }
+    expect(c.quality).toBeGreaterThanOrEqual(72);
+  });
+
+  it('does not thrash on a single outlier (hysteresis)', () => {
+    const c = createQualityController({ startQuality: 75 });
+    // one slow sample shouldn\'t immediately drop the band
+    expect(c.sample(800)).toBeNull();
   });
 });
 

@@ -33,6 +33,21 @@ describe('BrowserService — lifecycle', () => {
     expect(cdp.callsTo('Emulation.setTouchEmulationEnabled')).toHaveLength(1);
   });
 
+  it('setQuality: re-issues startScreencast with the new quality (adaptive)', async () => {
+    const { service, cdpFactory } = setup();
+    const id = await service.openSession('pi-1');
+    await service.attach(id, new RecordingViewer('v1'));
+    const cdp = cdpFactory.sessions.get('pi-1')!;
+    const before = cdp.callsTo('Page.startScreencast').length;
+    await service.setQuality(id, 40);
+    const casts = cdp.callsTo('Page.startScreencast');
+    expect(casts.length).toBe(before + 1);
+    expect((casts.at(-1)!.params as any).quality).toBe(40);
+    // same value → no extra restart
+    await service.setQuality(id, 40);
+    expect(cdp.callsTo('Page.startScreencast').length).toBe(before + 1);
+  });
+
   it('home: a new browser navigates to the configured home URL', async () => {
     const cdpFactory = new FakeCdpFactory();
     const service = createBrowserService({ cdpFactory, homeUrl: 'https://www.google.com/' });

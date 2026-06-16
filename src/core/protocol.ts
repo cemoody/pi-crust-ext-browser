@@ -72,7 +72,10 @@ export class BrowserError extends Error {
 export interface BrowserServiceOptions {
   readonly cdpFactory: CdpFactory;
   readonly maxSessions?: number;
+  /** Starting JPEG quality (adaptive quality moves between minQuality..maxQuality). */
   readonly jpegQuality?: number;
+  readonly minQuality?: number;
+  readonly maxQuality?: number;
   readonly maxWidth?: number;
   /** Close a browser with no viewers + no activity for this long (LIFE-5).
    *  Default 5 min. Set 0 to disable the reaper. */
@@ -102,6 +105,8 @@ export interface BrowserService {
   goBack(browserId: string): Promise<void>;
   /** Match the remote render to the viewer (size, mobile layout, touch). */
   setViewport(browserId: string, vp: { width: number; height: number; mobile?: boolean; deviceScaleFactor?: number }): Promise<void>;
+  /** Adjust the screencast JPEG quality (adaptive). Restarts the cast if changed. */
+  setQuality(browserId: string, quality: number): Promise<void>;
   /** TOOL-4: model-safe page snapshot (url/title/text); never includes secrets. */
   snapshot(browserId: string): Promise<{ url: string; title: string; text: string }>;
   /** HOFF-1/2: enter awaiting-human state. */

@@ -15,7 +15,7 @@
  * (GW-3 / SEC-6 / SEC-8).
  */
 import type { BrowserService, InputEvent, Viewer } from '../core/protocol.js';
-import { createFramePacer } from '../core/pacing.js';
+import { createFramePacer, createQualityController } from '../core/pacing.js';
 
 /** Minimal per-connection facade (matches ctx.server.realtime's PrcRealtimeConnection). */
 export interface RealtimeConnection {
@@ -61,11 +61,19 @@ export function makeBrowserConnectionHandler(
     const pacers = new Map<string, { offer: (f: unknown) => void; ack: () => void; dispose: () => void }>();
     const makePacer = (browserId: string) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const arm = () => { if (timer) clearTimeout(timer); timer = setTimeout(() => { timer = undefined; pacer.drain(); }, watchdogMs); };
-      const pacer = createFramePacer<unknown>((frame) => { conn.emit('browser:frame', frame); arm(); });
+      let sentAt = 0;
+      const quality = createQualityController();
+      const arm = () => { if (timer) clearTimeout(timer); timer = setTimeout(() => { timer = undefined; quality.sample(watchdogMs) !== null && void service.setQuality(browserId, quality.quality).catch(() => {}); pacer.drain(); }, watchdogMs); };
+      const pacer = createFramePacer<unknown>((frame) => { conn.emit('browser:frame', frame); sentAt = Date.now(); arm(); });
       const entry = {
         offer: (f: unknown) => pacer.offer(f),
-        ack: () => { if (timer) { clearTimeout(timer); timer = undefined; } pacer.drain(); },
+        ack: () => {
+          if (timer) { clearTimeout(timer); timer = undefined; }
+          // Adaptive JPEG quality from the measured round-trip (send -> draw -> ack).
+          const q = quality.sample(Date.now() - sentAt);
+          if (q !== null) void service.setQuality(browserId, q).catch(() => {});
+          pacer.drain();
+        },
         dispose: () => { if (timer) clearTimeout(timer); },
       };
       pacers.set(browserId, entry);

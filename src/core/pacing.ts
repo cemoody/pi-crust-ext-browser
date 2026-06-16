@@ -41,6 +41,46 @@ export function createFramePacer<T>(send: (frame: T) => void) {
   };
 }
 
+export interface QualityLadderRung { maxRtt: number; q: number }
+
+/**
+ * Adaptive JPEG-quality controller. Fed the per-frame round-trip time (send →
+ * client ack), it picks a quality from a ladder (fast link → high quality, slow
+ * link → low quality so frames are small and stay current). EWMA-smoothed with
+ * hysteresis so it doesn't thrash (each change restarts the screencast).
+ */
+export function createQualityController(opts?: {
+  ladder?: QualityLadderRung[];
+  alpha?: number;
+  hysteresis?: number;
+  startQuality?: number;
+}) {
+  const ladder = opts?.ladder ?? [
+    { maxRtt: 60, q: 85 }, { maxRtt: 130, q: 72 }, { maxRtt: 260, q: 58 }, { maxRtt: 520, q: 45 }, { maxRtt: Infinity, q: 32 },
+  ];
+  const alpha = opts?.alpha ?? 0.5;
+  const hysteresis = opts?.hysteresis ?? 2;
+  const start = opts?.startQuality;
+  let bandIdx = start !== undefined ? Math.max(0, ladder.findIndex((b) => b.q <= start)) : 1;
+  if (bandIdx < 0) bandIdx = ladder.length - 1;
+  let ewma: number | null = null;
+  let pendingIdx = bandIdx;
+  let pending = 0;
+  return {
+    /** Feed a round-trip sample (ms). Returns a new quality if it changed, else null. */
+    sample(rttMs: number): number | null {
+      ewma = ewma === null ? rttMs : ewma + alpha * (rttMs - ewma);
+      let idx = ladder.findIndex((b) => (ewma as number) <= b.maxRtt);
+      if (idx < 0) idx = ladder.length - 1;
+      if (idx === bandIdx) { pending = 0; return null; }
+      if (idx === pendingIdx) pending += 1; else { pendingIdx = idx; pending = 1; }
+      if (pending >= hysteresis) { bandIdx = idx; pending = 0; return ladder[idx].q; }
+      return null;
+    },
+    get quality(): number { return ladder[bandIdx].q; },
+  };
+}
+
 export interface InputCoalescerOptions {
   /** Schedule a flush; returns a cancel handle. Injected for deterministic tests. */
   schedule(cb: () => void): unknown;

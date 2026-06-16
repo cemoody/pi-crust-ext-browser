@@ -44,11 +44,14 @@ interface SessionState {
   onCrash?: (p: any) => void;
   lastActivity: number;
   lastMobile?: boolean;
+  quality: number;
 }
 
 export function createBrowserService(options: BrowserServiceOptions): BrowserService {
   const { cdpFactory } = options;
-  const quality = options.jpegQuality ?? 60;
+  const startQuality = options.jpegQuality ?? 75;
+  const minQuality = options.minQuality ?? 30;
+  const maxQuality = options.maxQuality ?? 90;
   const maxWidth = options.maxWidth ?? 1280;
   const maxSessions = options.maxSessions ?? Infinity;
   const idleMs = options.idleMs ?? 5 * 60 * 1000;
@@ -106,7 +109,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       s.cdp.on('Target.crashed', s.onCrash);
       s.cdp.on('Inspector.targetCrashed', s.onCrash);
     }
-    await s.cdp.send('Page.startScreencast', { format: 'jpeg', quality, maxWidth });
+    await s.cdp.send('Page.startScreencast', { format: 'jpeg', quality: s.quality, maxWidth });
   };
 
   const stopScreencast = async (s: SessionState): Promise<void> => {
@@ -179,6 +182,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
         viewers: new Map(),
         screencasting: false,
         seq: 0,
+        quality: startQuality,
         awaitingHuman: false,
         waiters: [],
         lastActivity: now(),
@@ -247,6 +251,15 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
         }
         await s.cdp.send('Page.reload', {}).catch(() => {});
       }
+    },
+
+    async setQuality(browserId: string, q: number): Promise<void> {
+      const s = require(browserId);
+      const clamped = Math.max(minQuality, Math.min(maxQuality, Math.round(q)));
+      if (clamped === s.quality) return;
+      s.quality = clamped;
+      // Re-issue startScreencast with the new quality (Chrome applies it live).
+      if (s.screencasting) await s.cdp.send('Page.startScreencast', { format: 'jpeg', quality: clamped, maxWidth }).catch(() => {});
     },
 
     async reload(browserId: string): Promise<void> {
