@@ -209,15 +209,16 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     const g = gestureRef.current;
     if (ev.pointerType === 'mouse') {
       const p = toPage(ev); send({ kind: 'mouse', type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+      focusKeyboard();
     } else if (!g.moved) {
-      // tap → click the remote element, then raise the keyboard so typing works
+      // tap → click the remote element, then raise the keyboard. focus() MUST be
+      // synchronous within this gesture or iOS won't open the soft keyboard. The
+      // canvas is non-focusable + its mousedown is preventDefault'd, so the
+      // synthesized mouse events that follow can't blur the textarea.
       send({ kind: 'mouse', type: 'mousePressed', x: g.px, y: g.py, button: 'left', clickCount: 1 });
       send({ kind: 'mouse', type: 'mouseReleased', x: g.px, y: g.py, button: 'left', clickCount: 1 });
+      focusKeyboard();
     }
-    // Route the keyboard to the hidden textarea on every tap/click (mobile +
-    // desktop). Deferred a tick so it wins against the synthesized mouse events
-    // that fire after touch (which otherwise blur it and dismiss the keyboard).
-    setTimeout(focusKeyboard, 0);
   };
 
   // --- Soft + hardware keyboard: forwarded from the hidden textarea.
