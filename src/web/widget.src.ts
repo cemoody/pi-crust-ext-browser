@@ -100,16 +100,32 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       (socket as any).on?.('connect', doAttach);
       (socket as any).on?.('connect_error', (e: any) => { if (!disposed) { setStatus('error'); setErrorMsg('gateway connect failed: ' + String(e?.message ?? e)); } });
 
-      transport.onFrame((f) => {
-        if (!canvas || !ctx) return;
+      // Adaptive client pacing: only ever decode the LATEST frame (drop any that
+      // arrived while we were decoding), then ack so the server sends the next
+      // current frame. Fast client → fast acks → high fps; slow decode → we skip
+      // stale frames instead of replaying a backlog.
+      let decoding = false;
+      let pending: any = null;
+      const drawLatest = () => {
+        if (decoding || !pending || !canvas || !ctx) return;
+        const f = pending; pending = null; decoding = true;
+        const done = () => {
+          decoding = false;
+          const id = browserIdRef.current; const t = transportRef.current as any;
+          if (id && t) t.frameDone(id);
+          if (pending) drawLatest();
+        };
         const img = new Image();
         img.onload = () => {
           if (canvas.width !== f.w) { canvas.width = f.w; canvas.height = f.h; }
           sizeRef.current = { w: f.w, h: f.h };
-          ctx.drawImage(img, 0, 0, f.w, f.h);
+          try { ctx.drawImage(img, 0, 0, f.w, f.h); } catch { /* ignore */ }
+          done();
         };
+        img.onerror = done;
         img.src = 'data:image/jpeg;base64,' + f.jpegB64;
-      });
+      };
+      transport.onFrame((f) => { pending = f; drawLatest(); });
       transport.onMeta((m) => {
         if (m.url) { setUrl(m.url); if (!editingRef.current) setUrlInput(m.url); }
         if (m.awaitingHuman) setAwaiting({ reason: m.reason || 'Sign in to continue' });

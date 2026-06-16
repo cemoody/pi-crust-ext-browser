@@ -80,6 +80,25 @@ describe('browser:* gateway', () => {
     expect(cdp.callsTo('Emulation.setDeviceMetricsOverride')).toHaveLength(2);
   });
 
+  it('adaptive pacing: sends one frame, coalesces to the latest until the client acks', async () => {
+    const { handler, cdpFactory } = setup();
+    const conn = new FakeRealtimeConnection('sock-A');
+    handler(conn);
+    const ack = await conn.send('browser:attach', { sessionId: 'pi-1', token: 'good' });
+    const cdp = cdpFactory.sessions.get('pi-1')!;
+    cdp.emitFrame({ data: 'F1' });           // sent immediately
+    cdp.emitFrame({ data: 'F2' });           // queued (in-flight) -> coalesced
+    cdp.emitFrame({ data: 'F3' });           // replaces F2 (dropped)
+    let frames = conn.framesFor(ack.browserId);
+    expect(frames).toHaveLength(1);
+    expect((frames[0].payload as any).jpegB64).toBe('F1');
+    // client drew F1 and acks -> server sends the LATEST pending (F3), skipping F2
+    await conn.send('browser:frame_ack', { browserId: ack.browserId });
+    frames = conn.framesFor(ack.browserId);
+    expect(frames).toHaveLength(2);
+    expect((frames[1].payload as any).jpegB64).toBe('F3');
+  });
+
   it('GW-2: the disconnect disposer detaches the socket’s browsers (no leak)', async () => {
     const { handler, service, cdpFactory } = setup();
     const conn = new FakeRealtimeConnection('sock-A');

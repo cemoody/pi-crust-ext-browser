@@ -15,6 +15,7 @@
  * (GW-3 / SEC-6 / SEC-8).
  */
 import type { BrowserService, InputEvent, Viewer } from '../core/protocol.js';
+import { createFramePacer } from '../core/pacing.js';
 
 /** Minimal per-connection facade (matches ctx.server.realtime's PrcRealtimeConnection). */
 export interface RealtimeConnection {
@@ -29,6 +30,9 @@ export interface BrowserGatewayDeps {
   resolveSession(sessionId: string): Promise<{ cwd: string } | undefined>;
   /** Verify a live-view token is bound to the session (SEC-8). Optional in dev. */
   verifyToken?(token: string | undefined, sessionId: string): boolean;
+  /** Watchdog: if a client doesn't ack a frame within this, send the next anyway
+   *  (keeps frames flowing for old clients; bounds latency). Default 400ms. */
+  readonly frameWatchdogMs?: number;
 }
 
 const ack = (cb: ((r: unknown) => void) | undefined, response: unknown): void => {
@@ -43,15 +47,35 @@ export function makeBrowserConnectionHandler(
   deps: BrowserGatewayDeps,
 ): (connection: RealtimeConnection) => () => void {
   const { service, resolveSession, verifyToken } = deps;
+  const watchdogMs = deps.frameWatchdogMs ?? 400;
 
   return (conn) => {
     // browserIds this connection attached; the only ones it may touch (SEC-1).
     const owned = new Set<string>();
 
-    const makeViewer = (): Viewer => ({
+    // Adaptive per-browser frame pacing (latest-wins). We send at most ONE
+    // un-acked frame; while waiting, newer frames replace the pending one (so a
+    // slow/behind client jumps to the freshest frame instead of replaying a
+    // backlog). The client acks via browser:frame_ack once it has drawn; a
+    // watchdog drains anyway so frames never stall.
+    const pacers = new Map<string, { offer: (f: unknown) => void; ack: () => void; dispose: () => void }>();
+    const makePacer = (browserId: string) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const arm = () => { if (timer) clearTimeout(timer); timer = setTimeout(() => { timer = undefined; pacer.drain(); }, watchdogMs); };
+      const pacer = createFramePacer<unknown>((frame) => { conn.emit('browser:frame', frame); arm(); });
+      const entry = {
+        offer: (f: unknown) => pacer.offer(f),
+        ack: () => { if (timer) { clearTimeout(timer); timer = undefined; } pacer.drain(); },
+        dispose: () => { if (timer) clearTimeout(timer); },
+      };
+      pacers.set(browserId, entry);
+      return entry;
+    };
+
+    const makeViewer = (browserId: string): Viewer => ({
       id: conn.id,
-      onFrame: (frame) => conn.emit('browser:frame', frame),
-      onMeta: (meta) => conn.emit('browser:meta', meta),
+      onFrame: (frame) => pacers.get(browserId)?.offer(frame),
+      onMeta: (meta) => conn.emit('browser:meta', meta), // meta/closed are not paced
     });
 
     conn.on('browser:attach', (payload, cb) => {
@@ -81,7 +105,8 @@ export function makeBrowserConnectionHandler(
         }
         try {
           const browserId = await service.openSession(sessionId);
-          await service.attach(browserId, makeViewer());
+          makePacer(browserId);
+          await service.attach(browserId, makeViewer(browserId));
           owned.add(browserId);
           // Match the remote render to the viewer if it sent its size.
           const vp = (p as any).viewport;
@@ -93,6 +118,12 @@ export function makeBrowserConnectionHandler(
           ack(cb, { ok: false, error: errOf(e) });
         }
       })();
+    });
+
+    // Client drew a frame and is ready for the next (adaptive pacing).
+    conn.on('browser:frame_ack', (payload) => {
+      const browserId = str(rec(payload).browserId);
+      if (browserId) pacers.get(browserId)?.ack();
     });
 
     conn.on('browser:input', (payload, cb) => {
@@ -130,6 +161,8 @@ export function makeBrowserConnectionHandler(
         const browserId = str(rec(payload).browserId);
         if (browserId && owned.has(browserId)) {
           owned.delete(browserId);
+          pacers.get(browserId)?.dispose();
+          pacers.delete(browserId);
           try {
             await service.detach(browserId, conn.id);
           } catch {
@@ -142,6 +175,8 @@ export function makeBrowserConnectionHandler(
 
     // GW-2: disconnect → detach every browser this socket attached (no leaks).
     return () => {
+      for (const entry of pacers.values()) entry.dispose();
+      pacers.clear();
       for (const browserId of [...owned]) {
         owned.delete(browserId);
         void service.detach(browserId, conn.id).catch(() => {});

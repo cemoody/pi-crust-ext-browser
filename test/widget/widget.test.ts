@@ -71,10 +71,11 @@ describe('widget (React/DOM)', () => {
     expect(typeof attach.payload.viewport?.height).toBe('number');
   });
 
-  it('STR-1: a browser:frame draws to the canvas', async () => {
+  it('STR-1: a browser:frame draws to the canvas and acks (adaptive pacing)', async () => {
     await renderWidget(apiWithSession);
-    await act(async () => { fakeSocket.fire('browser:frame', { browserId: 'br-1', seq: 1, jpegB64: 'AQID', w: 1280, h: 800 }); });
+    await act(async () => { fakeSocket.fire('browser:frame', { browserId: 'br-1', seq: 1, jpegB64: 'AQID', w: 1280, h: 800 }); await new Promise((r) => setTimeout(r, 0)); });
     expect(drawCalls.length).toBeGreaterThan(0);
+    expect(fakeSocket.emitted.some((e: any) => e.event === 'browser:frame_ack' && e.payload.browserId === 'br-1')).toBe(true);
   });
 
   it('STR-5: browser:meta updates the url bar', async () => {

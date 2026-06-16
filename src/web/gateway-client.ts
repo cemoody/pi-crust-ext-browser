@@ -24,6 +24,8 @@ export interface BrowserGatewayTransport {
   attach(sessionId: string, token?: string, viewport?: Viewport): Promise<AttachResult>;
   input(browserId: string, event: Record<string, unknown>): void;
   resize(browserId: string, viewport: Viewport): void;
+  /** Tell the server this client has drawn the current frame (adaptive pacing). */
+  frameDone(browserId: string): void;
   detach(browserId: string): void;
   onFrame(cb: (f: FrameEnvelope) => void): () => void;
   onMeta(cb: (m: MetaEnvelope) => void): () => void;
@@ -64,6 +66,9 @@ export function createGatewayTransport(socket: GatewaySocket, opts?: { ackTimeou
     },
     resize(browserId, viewport) {
       socket.emit('browser:resize', { browserId, viewport });
+    },
+    frameDone(browserId) {
+      socket.emit('browser:frame_ack', { browserId });
     },
     input(browserId, event) {
       if (coalescer) { currentBrowserId = browserId; coalescer.push(event); return; }
