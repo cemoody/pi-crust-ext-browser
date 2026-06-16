@@ -133,6 +133,18 @@ describe('widget (React/DOM)', () => {
     expect(key?.payload).toMatchObject({ browserId: 'br-1', type: 'keyDown', key: 'h' });
   });
 
+  it('paste: clipboard text is forwarded to the remote as text input', async () => {
+    await renderWidget(apiWithSession);
+    const kb = container.querySelector('textarea')!;
+    await act(async () => {
+      const e: any = new Event('paste', { bubbles: true, cancelable: true });
+      e.clipboardData = { getData: (t: string) => (t.includes('text') ? 'hunter2!' : '') };
+      kb.dispatchEvent(e);
+    });
+    const txt = fakeSocket.emitted.find((e: any) => e.event === 'browser:input' && e.payload.kind === 'text');
+    expect(txt?.payload).toMatchObject({ browserId: 'br-1', kind: 'text', text: 'hunter2!' });
+  });
+
   it('keyboard button focuses the hidden textarea (raises the soft keyboard)', async () => {
     await renderWidget(apiWithSession);
     const kbBtn = Array.from(container.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === 'Keyboard')!;

@@ -85,7 +85,7 @@ const val = (sel) => remoteEval((s) => document.querySelector(s)?.value ?? null,
 
 // 5) The "user" browser with the widget.
 const ub = await chromium.launch({ headless: true });
-const upage = await (await ub.newContext({ viewport: { width: 1000, height: 760 } })).newPage();
+const upage = await (await ub.newContext({ viewport: { width: 1000, height: 760 }, permissions: ['clipboard-read', 'clipboard-write'] })).newPage();
 const errs = []; upage.on('pageerror', (e) => errs.push(String(e)));
 await upage.goto(`http://127.0.0.1:${HTTP_PORT}/?session=e2e`, { waitUntil: 'networkidle' });
 await sleep(1500);
@@ -122,6 +122,13 @@ try {
   // submit via Enter
   await upage.keyboard.press('Enter'); await sleep(400);
   note('enter-submit', (await remoteEval(() => document.getElementById('result')?.textContent || '')).includes('SUBMITTED:cats'), `result = ${await remoteEval(() => document.getElementById('result')?.textContent)}`);
+
+  // FLOW 1b: PASTE from the local clipboard into a remote field (passwords).
+  await clickRemote('#q');
+  await upage.evaluate(() => { try { return navigator.clipboard.writeText('pa$$w0rd'); } catch { return null; } });
+  await upage.keyboard.press('Control+a');
+  await upage.keyboard.press('Control+v'); await sleep(300);
+  note('paste', (await val('#q')) === 'pa$$w0rd', `#q after paste = ${JSON.stringify(await val('#q'))}`);
 
   // FLOW 2: login form — Tab between fields
   await clickRemote('#user'); await type('octocat');

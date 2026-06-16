@@ -245,7 +245,17 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   const onKbKeyDown = (ev: any) => {
     const k = ev.key;
     if (!k || k === 'Unidentified') return; // composition/IME → beforeinput handles it
+    // Paste: let the browser's paste event deliver the LOCAL clipboard text
+    // (onKbPaste forwards it). Don't send Cmd/Ctrl+V to the remote — that would
+    // paste the remote's (empty) clipboard instead.
+    if ((ev.ctrlKey || ev.metaKey) && k.toLowerCase() === 'v') { return; }
     send({ kind: 'key', type: 'keyDown', key: k, code: ev.code, modifiers: { shift: ev.shiftKey, ctrl: ev.ctrlKey, alt: ev.altKey, meta: ev.metaKey } });
+    ev.preventDefault();
+  };
+  // Paste from the local clipboard → insert into the focused remote field.
+  const onKbPaste = (ev: any) => {
+    const text = ev.clipboardData?.getData?.('text/plain') ?? ev.clipboardData?.getData?.('text') ?? '';
+    if (text) send({ kind: 'text', text });
     ev.preventDefault();
   };
   const onKbKeyUp = (ev: any) => { const k = ev.key; if (k && k !== 'Unidentified') send({ kind: 'key', type: 'keyUp', key: k, code: ev.code }); };
@@ -332,7 +342,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     // its keystrokes/IME to the remote page (the canvas isn't a real input).
     React.createElement('textarea', {
       ref: kbRef, 'aria-hidden': 'true', autoCapitalize: 'off', autoCorrect: 'off', autoComplete: 'off', spellCheck: false,
-      onKeyDown: onKbKeyDown, onKeyUp: onKbKeyUp, onBeforeInput: onKbBeforeInput, onInput: (e: any) => { e.target.value = ''; },
+      onKeyDown: onKbKeyDown, onKeyUp: onKbKeyUp, onBeforeInput: onKbBeforeInput, onPaste: onKbPaste, onInput: (e: any) => { e.target.value = ''; },
       style: { position: 'absolute', opacity: 0, width: 1, height: 1, padding: 0, border: 0, left: 2, bottom: 2, resize: 'none' },
     }),
     React.createElement('div', { ref: wrapRef, style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' } },

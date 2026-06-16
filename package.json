@@ -1,6 +1,6 @@
 {
   "name": "@cemoody/pi-crust-ext-browser",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "Live remote-browser widget for pi-crust: the LLM drives a remote Chromium via CDP while a human can watch and type credentials inline.",
   "license": "MIT",
   "author": "cemoody",
