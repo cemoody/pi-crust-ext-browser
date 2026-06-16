@@ -126,7 +126,7 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
       const { chromium } = (await load()) as any;
       const browser = opts.cdpUrl
         ? await chromium.connectOverCDP(opts.cdpUrl)
-        : await chromium.launch({ headless: opts.launch?.headless ?? false });
+        : await chromium.launch({ headless: opts.launch?.headless ?? true });
 
       const context = browser.contexts()[0] ?? (await browser.newContext());
       const ensurePage = async () => context.pages()[0] ?? (await context.newPage());

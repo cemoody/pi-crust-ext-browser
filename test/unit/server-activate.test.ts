@@ -2,7 +2,7 @@
  * Server activation wiring + LLM tool registration. Uses fake host contexts so
  * we assert registrations without the real pi-crust/pi runtime.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import activate from '../../src/prc/server.js';
 import browserPiExtension from '../../src/pi/index.js';
 
@@ -53,11 +53,19 @@ describe('pi tools registration', () => {
     ]));
   });
 
-  it('browser_request_login returns a kind:html artifact for the session', async () => {
+  it('browser_request_login mints a token from the server and returns a kind:html artifact', async () => {
     let loginTool: any;
     browserPiExtension({ registerTool: (t: any) => { if (t.name === 'browser_request_login') loginTool = t; } } as any);
-    const out = await loginTool.execute('id', { reason: 'GitHub' }, { sessionId: 'pi-9' });
-    expect(out.details.piRemoteControlArtifact.kind).toBe('html');
-    expect(out.details.piRemoteControlArtifact.url).toContain('pi-9');
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (u: string) => { calls.push(String(u)); return { ok: true, json: async () => ({ token: 'tok-srv' }) } as any; });
+    try {
+      const out = await loginTool.execute('id', { reason: 'GitHub' }, { sessionId: 'pi-9' });
+      expect(calls.some((u) => u.includes('/api/ext/browser/token'))).toBe(true);
+      expect(out.details.piRemoteControlArtifact.kind).toBe('html');
+      expect(out.details.piRemoteControlArtifact.url).toContain('pi-9');
+      expect(out.details.piRemoteControlArtifact.url).toContain('tok-srv');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

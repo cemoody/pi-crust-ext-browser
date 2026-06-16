@@ -12,7 +12,6 @@
 import { buildLoginArtifact } from '../prc/login-artifact.js';
 
 const apiBase = () => process.env.PI_CRUST_API_BASE ?? 'http://127.0.0.1:8787';
-const secret = () => process.env.PI_CRUST_BROWSER_SECRET ?? 'pi-crust-ext-browser-dev-secret';
 
 function sessionIdOf(ctx: any): string | undefined {
   return ctx?.sessionId ?? ctx?.session?.id ?? process.env.PI_CRUST_BROWSER_SESSION_ID;
@@ -68,7 +67,15 @@ export default function browserPiExtension(pi: any): void {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
       const reason = typeof params?.reason === 'string' && params.reason ? params.reason : 'Sign in to continue';
-      return buildLoginArtifact(sessionId, reason, { secret: secret(), expiresAt: Date.now() + 60 * 60 * 1000 });
+      // Ask the server to mint a session-scoped token (no shared secret needed).
+      const res = await fetch(`${apiBase()}/api/ext/browser/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      if (!res.ok) throw new Error(`could not mint live-view token: ${res.status}`);
+      const { token } = await res.json();
+      return buildLoginArtifact(sessionId, reason, { token });
     },
   });
 

@@ -60,9 +60,18 @@ sidebar **Browser** activity streams a remote Chromium (via `PI_CRUST_BROWSER_CD
 → `connectOverCDP`) over `browser:*`; attach ack + JPEG frames confirmed end-to-end.
 
 ### Configuration (env)
-- `PI_CRUST_BROWSER_CDP_URL` — remote browser CDP endpoint (else launches headful).
-- `PI_CRUST_BROWSER_SECRET` — shared secret for live-view tokens.
-- `PI_CRUST_BROWSER_HEADLESS=1` — launch headless instead of headful.
+- `PI_CRUST_BROWSER_CDP_URL` — CDP endpoint of the remote browser to stream
+  (e.g. `ws://127.0.0.1:9222/`). If unset, the extension launches its own
+  **headless** Chromium (which still renders + streams normally, no display
+  needed) — but `playwright-core` ships no browser binary, so a local launch
+  also needs `npx playwright install chromium` on the host. Pointing at a CDP
+  endpoint is the zero-install path.
+- `PI_CRUST_BROWSER_HEADLESS=0` — opt into a visible window (needs an X display).
+  Default is headless.
+- `PI_CRUST_BROWSER_SECRET` — optional. Live-view tokens are issued by the
+  server and verified by the same process, so this is only needed if you run
+  the token issuer and verifier as separate processes. The inline login card
+  works without it (the tool fetches its token from the server).
 
 Full catalog + phasing: `docs/ACCEPTANCE-CRITERIA.md` (Phase 2 section), `docs/TEST-PLAN.md`.
 

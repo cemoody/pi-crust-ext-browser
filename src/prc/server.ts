@@ -44,7 +44,9 @@ export default function activate(prc: any): void {
   // Remote browser: connect to a configured CDP endpoint, else launch headful.
   const factory = createPlaywrightCdpFactory({
     ...(process.env.PI_CRUST_BROWSER_CDP_URL ? { cdpUrl: process.env.PI_CRUST_BROWSER_CDP_URL } : {}),
-    launch: { headless: process.env.PI_CRUST_BROWSER_HEADLESS === '1' },
+    // Headless by default (streams the same; needs no display). Opt into a
+    // visible window with PI_CRUST_BROWSER_HEADLESS=0 (requires an X display).
+    launch: { headless: process.env.PI_CRUST_BROWSER_HEADLESS !== '0' },
   });
   const service = createBrowserService({ cdpFactory: factory });
 
