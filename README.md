@@ -37,8 +37,22 @@ Current state (`50 passed | 49 todo`, tsc clean):
   `widget.mjs` (sidebar) + `live-card.js` (Tier-B inline card) via esbuild.
 - ✅ `routes` (GW-4) — token / live-view / resume / navigate handlers.
 - ✅ `server-activate` (HOST-1) — `activate()` wires realtime + factory + routes.
-- ✅ `login-artifact` (HOFF-2) + `pi` tools — browser_open/navigate/request_login/wait_for_human.
-- ⏳ `todo`: jsdom widget DOM tests, perf/resilience budgets, and the headful e2e job.
+- ✅ `login-artifact` (HOFF-2) + `pi` tools — open/navigate/snapshot/request_login/wait_for_human.
+
+**Phase 4 — hardening (green):**
+- ✅ `pacing` (PERF-1/2, RES-5) — latest-wins frame pacer + pointer-move coalescer
+  (wired into the widget transport).
+- ✅ crash recovery (RES-3), snapshot (TOOL-4/SEC-3 — innerText excludes secrets),
+  leak guard (PERF-5), `tools` RPC tests, jsdom transport test.
+- ✅ **real-browser e2e** (`npm run test:e2e`): streams frames, follows navigation
+  (CDP-2), and round-trips human input against a real Chromium over CDP.
+- ⏳ `todo`: full React/canvas widget DOM render tests + perf budget numbers in CI.
+
+### Tests
+```
+npm test        # fast suite: 82 passed | 29 todo (unit/contract/widget)
+npm run test:e2e   # real browser (set E2E_CHROMIUM_CDP_URL=ws://host:port/ or it launches one)
+```
 
 ### Verified live
 Runs inside pi-crust on its OWN realtime gateway (no standalone server): the

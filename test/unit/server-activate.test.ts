@@ -39,6 +39,7 @@ describe('server activate (HOST-1 / wiring)', () => {
       'GET /api/ext/browser/live/:sessionId',
       'POST /api/ext/browser/:sessionId/resume',
       'POST /api/ext/browser/:sessionId/navigate',
+      'POST /api/ext/browser/:sessionId/snapshot',
     ]));
   });
 });

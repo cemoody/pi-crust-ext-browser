@@ -1,18 +1,59 @@
 /**
- * LLM tools (pi.extensions) — RPC to the server-owned browser. Scaffolded as
- * todo: needs the fake-pi + extension harness wired to a BrowserService.
+ * TOOL-* — LLM tools register and RPC to the server routes. fetch is mocked so
+ * we assert the calls without a running server.
  */
-import { describe, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import browserPiExtension from '../../src/pi/index.js';
+
+function collectTools() {
+  const tools = new Map<string, any>();
+  browserPiExtension({ registerTool: (t: any) => tools.set(t.name, t) } as any);
+  return tools;
+}
 
 describe('LLM tools', () => {
-  it.todo('TOOL-1: each tool validates params; bad input → clear error, no side effects');
-  it.todo('TOOL-2: browser_navigate returns {url,title,status}; invalid URL → NAV_INVALID_URL');
-  it.todo('TOOL-3: browser_act click/fill/press/hover/scroll/waitFor; missing selector → SELECTOR_NOT_FOUND');
-  it.todo('TOOL-4: browser_snapshot returns aria/DOM text sufficient to choose next action');
-  it.todo('TOOL-5: browser_snapshot redacts input[type=password] (delegates to redactSnapshot)');
-  it.todo('TOOL-6: tools are RPC to server; agent process holds no CDP socket');
-  it.todo('TOOL-7: tool errors are typed (code+message), no raw stack to the model');
-  it.todo('HOFF-2: browser_request_login result carries details.piRemoteControlArtifact {kind:html,url:/live/}');
-  it.todo('HOFF-10: after a full login handoff, captured tool I/O contains no password and no frame bytes');
-  it.todo('HOST-1: activation without ctx.server.realtime throws a clear, actionable error');
+  let calls: { url: string; body: any }[];
+  beforeEach(() => {
+    calls = [];
+    process.env.PI_CRUST_API_BASE = 'http://test-host:9999';
+    vi.stubGlobal('fetch', async (url: string, init: any) => {
+      calls.push({ url, body: init?.body ? JSON.parse(init.body) : undefined });
+      return { ok: true, json: async () => ({ ok: true, resumed: true, title: 'T', url: 'u', text: 'body' }) } as any;
+    });
+  });
+  afterEach(() => { vi.unstubAllGlobals(); delete process.env.PI_CRUST_API_BASE; });
+
+  it('TOOL-1: registers the full browser_* tool set', () => {
+    const tools = collectTools();
+    for (const n of ['browser_open', 'browser_navigate', 'browser_snapshot', 'browser_request_login', 'browser_wait_for_human']) {
+      expect(tools.has(n)).toBe(true);
+    }
+  });
+
+  it('TOOL-2: browser_navigate RPCs to the navigate route with the url', async () => {
+    const t = collectTools().get('browser_navigate');
+    await t.execute('id', { url: 'https://example.com' }, { sessionId: 'pi-1' });
+    expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-1/navigate');
+    expect(calls[0].body).toEqual({ url: 'https://example.com' });
+  });
+
+  it('TOOL-4: browser_snapshot RPCs to the snapshot route and returns text', async () => {
+    const t = collectTools().get('browser_snapshot');
+    const out = await t.execute('id', {}, { sessionId: 'pi-1' });
+    expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-1/snapshot');
+    expect(out.content[0].text).toContain('body');
+  });
+
+  it('TOOL-7: a tool with no session id throws a clear error (no RPC)', async () => {
+    const t = collectTools().get('browser_navigate');
+    await expect(t.execute('id', { url: 'x' }, {})).rejects.toThrow(/session id/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('browser_wait_for_human RPCs to resume and reports the result', async () => {
+    const t = collectTools().get('browser_wait_for_human');
+    const out = await t.execute('id', {}, { sessionId: 'pi-1' });
+    expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-1/resume');
+    expect(out.content[0].text).toMatch(/signed in/i);
+  });
 });

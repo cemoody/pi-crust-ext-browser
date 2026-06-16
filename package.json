@@ -14,7 +14,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:web": "node scripts/build-web.mjs",
     "build": "tsc -p tsconfig.build.json && npm run build:web",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "pi": {
     "extensions": [
@@ -60,6 +61,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "esbuild": "^0.24.0",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0"
   }

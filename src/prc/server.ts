@@ -64,6 +64,7 @@ export default function activate(prc: any): void {
   prc.server.api.get('/api/ext/browser/live/:sessionId', (req: any) => routes.liveView(req));
   prc.server.api.post('/api/ext/browser/:sessionId/resume', (req: any) => routes.resume(req));
   prc.server.api.post('/api/ext/browser/:sessionId/navigate', (req: any) => routes.navigate(req));
+  prc.server.api.post('/api/ext/browser/:sessionId/snapshot', (req: any) => routes.snapshot(req));
 
   // Serve the bundled inline-card client (built by scripts/build-web.mjs).
   prc.server.api.get('/api/ext/browser/live-card.js', () => {

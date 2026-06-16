@@ -87,6 +87,8 @@ export interface BrowserService {
   input(browserId: string, viewerId: string, event: InputEvent): Promise<void>;
   /** TOOL-2: navigate the browser (CDP Page.navigate). */
   navigate(browserId: string, url: string): Promise<void>;
+  /** TOOL-4: model-safe page snapshot (url/title/text); never includes secrets. */
+  snapshot(browserId: string): Promise<{ url: string; title: string; text: string }>;
   /** HOFF-1/2: enter awaiting-human state. */
   requestLogin(browserId: string, reason: string): void;
   /** HOFF-3/4/5: resolves on resume, rejects on timeout/cancel. */

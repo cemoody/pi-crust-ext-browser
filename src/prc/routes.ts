@@ -81,5 +81,15 @@ export function createBrowserRoutes(deps: BrowserRoutesDeps) {
       await deps.service.navigate(browserId, url);
       return { status: 200, body: { ok: true, browserId } };
     },
+
+    async snapshot(req: RouteRequest): Promise<RouteResponse> {
+      const sessionId = req.params.sessionId;
+      if (!(await deps.resolveSession(sessionId).catch(() => undefined))) {
+        return { status: 404, body: { error: `unknown session: ${sessionId}` } };
+      }
+      const browserId = await deps.service.openSession(sessionId);
+      const snap = await deps.service.snapshot(browserId);
+      return { status: 200, body: snap };
+    },
   };
 }

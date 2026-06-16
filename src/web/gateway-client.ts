@@ -4,6 +4,7 @@
  * socket.io needed. widget.src.ts injects a real socket.io-client `Socket`.
  */
 import type { FrameEnvelope, MetaEnvelope } from '../core/protocol.js';
+import { createInputCoalescer } from '../core/pacing.js';
 
 /** The subset of a socket.io-client Socket we use. */
 export interface GatewaySocket {
@@ -26,11 +27,24 @@ export interface BrowserGatewayTransport {
   dispose(): void;
 }
 
-export function createGatewayTransport(socket: GatewaySocket, opts?: { ackTimeoutMs?: number }): BrowserGatewayTransport {
+export function createGatewayTransport(socket: GatewaySocket, opts?: { ackTimeoutMs?: number; coalesceInput?: boolean }): BrowserGatewayTransport {
   const frameCbs = new Set<(f: FrameEnvelope) => void>();
   const metaCbs = new Set<(m: MetaEnvelope) => void>();
   socket.on('browser:frame', (f) => { for (const cb of [...frameCbs]) cb(f); });
   socket.on('browser:meta', (m) => { for (const cb of [...metaCbs]) cb(m); });
+
+  // PERF-2: coalesce pointer-move bursts to ~1 per animation frame. Disabled in
+  // environments without requestAnimationFrame (e.g. tests) unless overridden.
+  const raf = typeof requestAnimationFrame === 'function';
+  const coalesce = opts?.coalesceInput ?? raf;
+  let coalescer: ReturnType<typeof createInputCoalescer> | null = null;
+  let currentBrowserId: string | null = null;
+  if (coalesce && raf) {
+    coalescer = createInputCoalescer(
+      (ev) => { if (currentBrowserId) socket.emit('browser:input', { browserId: currentBrowserId, ...ev }); },
+      { schedule: (cb) => requestAnimationFrame(cb), cancel: (h) => cancelAnimationFrame(h as number) },
+    );
+  }
 
   const ackTimeoutMs = opts?.ackTimeoutMs ?? 8000;
   const emitWithAck = (event: string, payload: unknown): Promise<any> =>
@@ -46,6 +60,7 @@ export function createGatewayTransport(socket: GatewaySocket, opts?: { ackTimeou
       return { browserId: ack.browserId, viewport: ack.viewport };
     },
     input(browserId, event) {
+      if (coalescer) { currentBrowserId = browserId; coalescer.push(event); return; }
       socket.emit('browser:input', { browserId, ...event });
     },
     detach(browserId) {

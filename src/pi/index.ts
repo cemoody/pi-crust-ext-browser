@@ -73,6 +73,19 @@ export default function browserPiExtension(pi: any): void {
   });
 
   pi.registerTool?.({
+    name: 'browser_snapshot',
+    label: 'Snapshot page',
+    description: 'Return the current page url/title/visible text (model-safe; secret field values are never included).',
+    parameters: obj({}),
+    async execute(_id: string, _params: any, ctx: any) {
+      const sessionId = sessionIdOf(ctx);
+      if (!sessionId) throw new Error('no session id available');
+      const snap = await rpc(`/${encodeURIComponent(sessionId)}/snapshot`, {});
+      return { content: [{ type: 'text', text: `# ${snap.title}\n${snap.url}\n\n${snap.text}` }] };
+    },
+  });
+
+  pi.registerTool?.({
     name: 'browser_wait_for_human',
     label: 'Wait for human',
     description: 'Block until the human clicks Resume in the live browser card (after signing in).',

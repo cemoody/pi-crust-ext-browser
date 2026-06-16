@@ -41,6 +41,7 @@ interface SessionState {
   waiters: Waiter[];
   onFrame?: (p: any) => void;
   onNav?: (p: any) => void;
+  onCrash?: (p: any) => void;
 }
 
 export function createBrowserService(options: BrowserServiceOptions): BrowserService {
@@ -71,7 +72,8 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
 
     s.onFrame = (p: any) => {
       // Ack immediately so Chromium keeps sending (STR-6 backpressure pacing).
-      void s.cdp.send('Page.screencastFrameAck', { sessionId: p.sessionId });
+      // Swallow post-close rejections (the socket may drop mid-frame).
+      void s.cdp.send('Page.screencastFrameAck', { sessionId: p.sessionId }).catch(() => {});
       s.seq += 1;
       const w = p?.metadata?.deviceWidth ?? maxWidth;
       const h = p?.metadata?.deviceHeight ?? 0;
@@ -85,6 +87,17 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
     };
     s.cdp.on('Page.screencastFrame', s.onFrame);
     s.cdp.on('Page.frameNavigated', s.onNav);
+    // Enable the Page domain so frameNavigated events fire (meta url updates).
+    await s.cdp.send('Page.enable');
+    if (!s.onCrash) {
+      // RES-3: surface a target/page crash to viewers, then stop the stream.
+      s.onCrash = () => {
+        fanMeta(s, { closed: true, reason: 'browser target crashed' });
+        void stopScreencast(s);
+      };
+      s.cdp.on('Target.crashed', s.onCrash);
+      s.cdp.on('Inspector.targetCrashed', s.onCrash);
+    }
     await s.cdp.send('Page.startScreencast', { format: 'jpeg', quality, maxWidth });
   };
 
@@ -165,6 +178,16 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
     async navigate(browserId: string, url: string): Promise<void> {
       const s = require(browserId);
       await s.cdp.send('Page.navigate', { url });
+    },
+
+    async snapshot(browserId: string): Promise<{ url: string; title: string; text: string }> {
+      const s = require(browserId);
+      // innerText excludes <input> values, so passwords never appear (SEC-3).
+      const expr =
+        '({url:location.href,title:document.title,text:(document.body?document.body.innerText:"").slice(0,20000)})';
+      const res = (await s.cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true })) as any;
+      const v = res?.result?.value ?? {};
+      return { url: String(v.url ?? ''), title: String(v.title ?? ''), text: String(v.text ?? '') };
     },
 
     requestLogin(browserId: string, reason: string): void {

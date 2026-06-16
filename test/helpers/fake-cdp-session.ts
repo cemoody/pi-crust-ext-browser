@@ -12,10 +12,12 @@ export class FakeCdpSession implements CdpSession {
   private handlers = new Map<string, Set<(p: any) => void>>();
   private frameSession = 0;
 
+  /** Settable result for Runtime.evaluate (snapshot tests). */
+  evaluateValue: unknown = undefined;
   async send(method: string, params?: Record<string, unknown>): Promise<unknown> {
     this.sent.push({ method, params });
     if (method === 'Page.startScreencast') this.frameSession += 1;
-    if (method === 'Runtime.evaluate') return { result: { value: undefined } };
+    if (method === 'Runtime.evaluate') return { result: { value: this.evaluateValue } };
     return {};
   }
   on(event: string, handler: (p: any) => void): void {

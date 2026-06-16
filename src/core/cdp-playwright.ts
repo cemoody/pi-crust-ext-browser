@@ -69,7 +69,7 @@ export function createCdpAdapter(source: RawCdpSource): CdpSession {
     active = next;
     attachForwarders(active);
     // Re-establish the screencast on the new target so frames keep flowing.
-    if (screencastArgs) void active.send('Page.startScreencast', screencastArgs);
+    if (screencastArgs) void active.send('Page.startScreencast', screencastArgs).catch(() => {});
   });
 
   return {
@@ -134,17 +134,23 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
 
       // Track the active page; switch to a newly-opened page (CDP-2 new tab).
       const targetHandlers = new Set<() => void>();
+      let closed = false;
       let raw = await context.newCDPSession(page);
+      browser.on('disconnected', () => { closed = true; });
       context.on('page', async (p: any) => {
-        page = p;
-        raw = await context.newCDPSession(page);
-        for (const h of [...targetHandlers]) h();
+        if (closed) return;
+        try { page = p; raw = await context.newCDPSession(page); for (const h of [...targetHandlers]) h(); }
+        catch { /* browser closing */ }
       });
+      context.on('close', () => { closed = true; });
       page.on('close', async () => {
-        const next = await ensurePage();
-        page = next;
-        raw = await context.newCDPSession(page);
-        for (const h of [...targetHandlers]) h();
+        if (closed) return;
+        try {
+          const next = await ensurePage();
+          page = next;
+          raw = await context.newCDPSession(page);
+          for (const h of [...targetHandlers]) h();
+        } catch { /* browser/context closing */ }
       });
 
       const source: RawCdpSource = {
@@ -155,6 +161,7 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
       return {
         session: createCdpAdapter(source),
         close: async () => {
+          closed = true;
           try {
             await browser.close();
           } catch {
