@@ -113,6 +113,20 @@ export function createBrowserRoutes(deps: BrowserRoutesDeps) {
       return { status: 200, body: { ok: true, browserId } };
     },
 
+    async reload(req: RouteRequest): Promise<RouteResponse> {
+      const sessionId = req.params.sessionId;
+      if (!deps.service.hasSession(sessionId)) return { status: 200, body: { ok: false } };
+      await deps.service.reload(await deps.service.openSession(sessionId));
+      return { status: 200, body: { ok: true } };
+    },
+
+    async back(req: RouteRequest): Promise<RouteResponse> {
+      const sessionId = req.params.sessionId;
+      if (!deps.service.hasSession(sessionId)) return { status: 200, body: { ok: false } };
+      await deps.service.goBack(await deps.service.openSession(sessionId));
+      return { status: 200, body: { ok: true } };
+    },
+
     async snapshot(req: RouteRequest): Promise<RouteResponse> {
       const sessionId = req.params.sessionId;
       if (!(await deps.resolveSession(sessionId).catch(() => undefined))) {

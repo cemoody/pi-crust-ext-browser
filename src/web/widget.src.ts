@@ -42,6 +42,9 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   const React = hostProps.React;
   const { useEffect, useRef, useState } = React;
   const canvasRef = useRef(null);
+  const kbRef = useRef(null);
+  const gestureRef = useRef({ sx: 0, sy: 0, lx: 0, ly: 0, px: 0, py: 0, moved: false, touch: false });
+  const pressedRef = useRef(false);
   const sizeRef = useRef({ w: 1280, h: 800 });
   const transportRef = useRef(null);
   const browserIdRef = useRef(null);
@@ -135,14 +138,72 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     if (t && id) t.input(id, ev);
   };
 
-  const onMouse = (type: string) => (ev: any) => {
+  // Summon the on-screen keyboard by focusing the hidden textarea (mobile can
+  // only raise the soft keyboard for a focused editable element).
+  const focusKeyboard = () => { try { (kbRef.current as any)?.focus({ preventScroll: true }); } catch { /* ignore */ } };
+
+  // --- Pointer input: mouse = move/click/drag; touch = tap-to-click + drag-to-scroll.
+  const onPointerDown = (ev: any) => {
     const p = toPage(ev);
-    send({ kind: 'mouse', type, x: p.x, y: p.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
-    if (type === 'mousePressed') canvasRef.current?.focus();
+    gestureRef.current = { sx: ev.clientX, sy: ev.clientY, lx: ev.clientX, ly: ev.clientY, px: p.x, py: p.y, moved: false, touch: ev.pointerType !== 'mouse' };
+    pressedRef.current = true;
+    try { canvasRef.current?.setPointerCapture?.(ev.pointerId); } catch { /* ignore */ }
+    if (ev.pointerType === 'mouse') send({ kind: 'mouse', type: 'mousePressed', x: p.x, y: p.y, button: 'left', clickCount: 1 });
   };
-  const onKey = (type: string) => (ev: any) => {
-    send({ kind: 'key', type, key: ev.key, code: ev.code, text: ev.key.length === 1 ? ev.key : undefined });
-    ev.preventDefault();
+  const onPointerMove = (ev: any) => {
+    const g = gestureRef.current;
+    if (!pressedRef.current) {
+      if (ev.pointerType === 'mouse') { const p = toPage(ev); send({ kind: 'mouse', type: 'mouseMoved', x: p.x, y: p.y }); }
+      return;
+    }
+    if (Math.abs(ev.clientX - g.sx) + Math.abs(ev.clientY - g.sy) > 8) g.moved = true;
+    if (ev.pointerType === 'mouse') {
+      const p = toPage(ev); send({ kind: 'mouse', type: 'mouseMoved', x: p.x, y: p.y });
+    } else {
+      // touch drag → scroll the page by the delta since the last move
+      const r = canvasRef.current!.getBoundingClientRect();
+      const { w, h } = sizeRef.current;
+      const dx = (ev.clientX - g.lx) * (w / r.width);
+      const dy = (ev.clientY - g.ly) * (h / r.height);
+      g.lx = ev.clientX; g.ly = ev.clientY;
+      send({ kind: 'mouse', type: 'mouseWheel', x: g.px, y: g.py, deltaX: -dx, deltaY: -dy });
+    }
+  };
+  const onPointerUp = (ev: any) => {
+    if (!pressedRef.current) return;
+    pressedRef.current = false;
+    const g = gestureRef.current;
+    if (ev.pointerType === 'mouse') {
+      const p = toPage(ev); send({ kind: 'mouse', type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+    } else if (!g.moved) {
+      // tap → click the remote element, then raise the keyboard so typing works
+      send({ kind: 'mouse', type: 'mousePressed', x: g.px, y: g.py, button: 'left', clickCount: 1 });
+      send({ kind: 'mouse', type: 'mouseReleased', x: g.px, y: g.py, button: 'left', clickCount: 1 });
+      focusKeyboard();
+    }
+  };
+
+  // --- Soft + hardware keyboard: forwarded from the hidden textarea.
+  const onKbKeyDown = (ev: any) => {
+    if (ev.key && ev.key.length > 1) { // named keys (Enter, Backspace, Arrow*, Tab, Esc)
+      send({ kind: 'key', type: 'keyDown', key: ev.key, code: ev.code });
+      if (['Backspace', 'Tab', 'Enter', 'ArrowUp', 'ArrowDown'].includes(ev.key)) ev.preventDefault();
+    } else if (ev.key && (ev.ctrlKey || ev.metaKey)) {
+      send({ kind: 'key', type: 'keyDown', key: ev.key, code: ev.code, modifiers: { ctrl: ev.ctrlKey, meta: ev.metaKey, shift: ev.shiftKey, alt: ev.altKey } });
+    }
+  };
+  const onKbKeyUp = (ev: any) => { if (ev.key && ev.key.length > 1) send({ kind: 'key', type: 'keyUp', key: ev.key, code: ev.code }); };
+  // beforeinput carries soft-keyboard text/IME on mobile (keydown often lacks it).
+  const onKbBeforeInput = (ev: any) => {
+    const t = ev.inputType;
+    if (t === 'insertText' && ev.data) { send({ kind: 'text', text: ev.data }); ev.preventDefault(); }
+    else if (t === 'insertLineBreak' || t === 'insertParagraph') { send({ kind: 'key', type: 'keyDown', key: 'Enter' }); send({ kind: 'key', type: 'keyUp', key: 'Enter' }); ev.preventDefault(); }
+    else if (t === 'deleteContentBackward') { send({ kind: 'key', type: 'keyDown', key: 'Backspace' }); send({ kind: 'key', type: 'keyUp', key: 'Backspace' }); ev.preventDefault(); }
+  };
+
+  const ctrlAction = (action: string) => async () => {
+    const id = sessionIdRef.current; if (!id) return;
+    try { await fetch(`/api/ext/browser/${encodeURIComponent(id)}/${action}`, { method: 'POST' }); } catch { /* ignore */ }
   };
 
   // Address bar: navigate the browser THIS widget is attached to.
@@ -164,6 +225,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   };
 
   const dot = status === 'live' ? '#3c6' : status === 'connecting' ? '#da3' : status === 'closed' ? '#e44' : '#e44';
+  const btnStyle = { flexShrink: 0, width: 32, height: 32, padding: 0, cursor: 'pointer', background: '#fff', color: '#5f6368', border: '1px solid #dadce0', borderRadius: 8, fontSize: 15, lineHeight: '1' };
   const rootStyle = maximized
     ? { position: 'fixed', inset: '0', zIndex: 2147483000, display: 'flex', flexDirection: 'column', background: '#15151a' }
     : { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#15151a' };
@@ -172,7 +234,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     // Header padded to clear the host's floating corner controls (sidebar
     // toggle on the left, menu on the right) — important on mobile where they
     // overlay the panel. The URL field is a rounded search pill.
-    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', paddingLeft: 60, paddingRight: 52, minHeight: 52, boxSizing: 'border-box', color: '#202124', font: '13px system-ui', borderBottom: '1px solid #dadce0', background: '#f1f3f4' } },
+    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '8px 8px', paddingLeft: 58, paddingRight: 50, minHeight: 52, boxSizing: 'border-box', color: '#202124', font: '13px system-ui', borderBottom: '1px solid #dadce0', background: '#f1f3f4' } },
       React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 14px', background: '#fff', border: '1px solid #dadce0', borderRadius: 999, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)' } },
         React.createElement('span', { 'data-testid': 'status-dot', title: status, style: { flexShrink: 0, width: 9, height: 9, borderRadius: '50%', background: dot, display: 'inline-block' } }),
         React.createElement('span', { 'aria-hidden': 'true', style: { flexShrink: 0, opacity: 0.55, fontSize: 13 } }, '🔍'),
@@ -186,7 +248,10 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
           style: { flex: 1, minWidth: 0, background: 'transparent', color: '#202124', border: 'none', padding: 0, font: '14px system-ui', outline: 'none' },
         }),
       ),
-      React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: { flexShrink: 0, width: 36, height: 36, cursor: 'pointer', background: '#fff', color: '#5f6368', border: '1px solid #dadce0', borderRadius: 8, fontSize: 14 } }, maximized ? '🗗' : '🗖'),
+      React.createElement('button', { 'aria-label': 'Back', title: 'Back', onClick: ctrlAction('back'), style: btnStyle }, '‹'),
+      React.createElement('button', { 'aria-label': 'Reload', title: 'Reload', onClick: ctrlAction('reload'), style: btnStyle }, '↻'),
+      React.createElement('button', { 'aria-label': 'Keyboard', title: 'Show keyboard', onClick: focusKeyboard, style: btnStyle }, '⌨'),
+      React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: btnStyle }, maximized ? '🗗' : '🗖'),
     ),
     awaiting ? React.createElement('div', { 'data-testid': 'awaiting-banner', role: 'alert', style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#3a2f00', color: '#ffd', font: '12px system-ui' } },
       React.createElement('span', null, `🔐 Agent is waiting — ${(awaiting as any).reason}`),
@@ -197,12 +262,19 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       errorMsg ? React.createElement('div', { style: { opacity: 0.85, fontFamily: 'ui-monospace, monospace', marginTop: 4, whiteSpace: 'pre-wrap' } }, errorMsg) : null,
       React.createElement('div', { style: { opacity: 0.75, marginTop: 6 } }, 'Set PI_CRUST_BROWSER_CDP_URL to a Chrome debug endpoint (e.g. ws://127.0.0.1:9222/), or run `npx playwright install chromium` on the host, then restart pi-crust.'),
     ) : null,
+    // Hidden textarea: focusing it raises the mobile soft keyboard; we forward
+    // its keystrokes/IME to the remote page (the canvas isn't a real input).
+    React.createElement('textarea', {
+      ref: kbRef, 'aria-hidden': 'true', autoCapitalize: 'off', autoCorrect: 'off', autoComplete: 'off', spellCheck: false,
+      onKeyDown: onKbKeyDown, onKeyUp: onKbKeyUp, onBeforeInput: onKbBeforeInput, onInput: (e: any) => { e.target.value = ''; },
+      style: { position: 'absolute', opacity: 0, width: 1, height: 1, padding: 0, border: 0, left: 2, bottom: 2, resize: 'none' },
+    }),
     React.createElement('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' } },
       React.createElement('canvas', {
         ref: canvasRef, width: 1280, height: 800, tabIndex: 0, 'aria-label': 'Remote browser viewport',
-        style: { maxWidth: '100%', maxHeight: '100%', background: '#fff', cursor: 'crosshair', boxShadow: '0 0 0 1px #333' },
-        onMouseDown: onMouse('mousePressed'), onMouseUp: onMouse('mouseReleased'), onMouseMove: onMouse('mouseMoved'),
-        onKeyDown: onKey('keyDown'), onKeyUp: onKey('keyUp'),
+        style: { maxWidth: '100%', maxHeight: '100%', background: '#fff', cursor: 'crosshair', boxShadow: '0 0 0 1px #333', touchAction: 'none' },
+        onPointerDown: onPointerDown, onPointerMove: onPointerMove, onPointerUp: onPointerUp, onPointerCancel: onPointerUp,
+        onKeyDown: onKbKeyDown, onKeyUp: onKbKeyUp, onBeforeInput: onKbBeforeInput,
       }),
     ),
   );

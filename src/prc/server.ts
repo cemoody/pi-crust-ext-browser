@@ -48,7 +48,10 @@ export default function activate(prc: any): void {
     // visible window with PI_CRUST_BROWSER_HEADLESS=0 (requires an X display).
     launch: { headless: process.env.PI_CRUST_BROWSER_HEADLESS !== '0' },
   });
-  const service = createBrowserService({ cdpFactory: factory });
+  const service = createBrowserService({
+    cdpFactory: factory,
+    homeUrl: process.env.PI_CRUST_BROWSER_HOME ?? 'https://www.google.com/',
+  });
 
   // Gateway: per-connection browser:* handlers. Token is OPTIONAL for the
   // same-origin sidebar (the host already authenticates the page); the inline
@@ -72,6 +75,8 @@ export default function activate(prc: any): void {
   prc.server.api.post('/api/ext/browser/:sessionId/wait', (req: any) => routes.wait(req));
   prc.server.api.post('/api/ext/browser/:sessionId/resume', (req: any) => routes.resume(req));
   prc.server.api.post('/api/ext/browser/:sessionId/navigate', (req: any) => routes.navigate(req));
+  prc.server.api.post('/api/ext/browser/:sessionId/reload', (req: any) => routes.reload(req));
+  prc.server.api.post('/api/ext/browser/:sessionId/back', (req: any) => routes.back(req));
   prc.server.api.post('/api/ext/browser/:sessionId/snapshot', (req: any) => routes.snapshot(req));
 
   // Serve the bundled inline-card client (built by scripts/build-web.mjs).

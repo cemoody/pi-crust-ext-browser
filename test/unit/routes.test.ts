@@ -87,6 +87,15 @@ describe('browser routes', () => {
     expect((await waiting).body).toEqual({ resumed: true });
   });
 
+  it('reload/back drive the browser via CDP', async () => {
+    const { routes, service, cdpFactory } = setup();
+    await service.openSession('pi-1');
+    expect((await routes.reload(req({ params: { sessionId: 'pi-1' } }))).body).toEqual({ ok: true });
+    expect(cdpFactory.sessions.get('pi-1')!.callsTo('Page.reload')).toHaveLength(1);
+    await routes.back(req({ params: { sessionId: 'pi-1' } }));
+    expect(cdpFactory.sessions.get('pi-1')!.callsTo('Page.getNavigationHistory')).toHaveLength(1);
+  });
+
   it('wait/resume on a session with no browser are no-ops (no spurious Chromium)', async () => {
     const { routes, service } = setup();
     expect((await routes.resume(req({ params: { sessionId: 'pi-1' } }))).body).toEqual({ resumed: false });

@@ -22,6 +22,15 @@ describe('BrowserService — lifecycle', () => {
     expect(cdpFactory.sessions.size).toBe(1);
   });
 
+  it('home: a new browser navigates to the configured home URL', async () => {
+    const cdpFactory = new FakeCdpFactory();
+    const service = createBrowserService({ cdpFactory, homeUrl: 'https://www.google.com/' });
+    await service.openSession('pi-1');
+    const navs = cdpFactory.sessions.get('pi-1')!.callsTo('Page.navigate');
+    expect(navs).toHaveLength(1);
+    expect(navs[0].params).toEqual({ url: 'https://www.google.com/' });
+  });
+
   it('LIFE-3: closeSession disposes the underlying CDP session (no orphans)', async () => {
     const { service, cdpFactory } = setup();
     await service.openSession('pi-1');

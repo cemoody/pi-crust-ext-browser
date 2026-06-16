@@ -52,6 +52,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
   const maxSessions = options.maxSessions ?? Infinity;
   const idleMs = options.idleMs ?? 5 * 60 * 1000;
   const reapIntervalMs = options.reapIntervalMs ?? 30 * 1000;
+  const homeUrl = options.homeUrl;
   const now = options.now ?? Date.now;
 
   const byBrowserId = new Map<string, SessionState>();
@@ -182,6 +183,9 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
         lastActivity: now(),
       });
       browserIdByPi.set(piSessionId, browserId);
+      // New browser opens on the configured home page (e.g. google.com) so the
+      // panel shows something instead of about:blank.
+      if (homeUrl) void session.send('Page.navigate', { url: homeUrl }).catch(() => {});
       return browserId;
     },
 
@@ -214,6 +218,21 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       const s = require(browserId);
       touch(s);
       await s.cdp.send('Page.navigate', { url });
+    },
+
+    async reload(browserId: string): Promise<void> {
+      const s = require(browserId);
+      touch(s);
+      await s.cdp.send('Page.reload', {});
+    },
+
+    async goBack(browserId: string): Promise<void> {
+      const s = require(browserId);
+      touch(s);
+      const h = (await s.cdp.send('Page.getNavigationHistory')) as any;
+      const entries = Array.isArray(h?.entries) ? h.entries : [];
+      const idx = (typeof h?.currentIndex === 'number' ? h.currentIndex : 0) - 1;
+      if (idx >= 0 && entries[idx]) await s.cdp.send('Page.navigateToHistoryEntry', { entryId: entries[idx].id });
     },
 
     async snapshot(browserId: string): Promise<{ url: string; title: string; text: string }> {

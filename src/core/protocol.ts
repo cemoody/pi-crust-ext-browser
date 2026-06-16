@@ -79,6 +79,8 @@ export interface BrowserServiceOptions {
   readonly idleMs?: number;
   /** How often the idle reaper sweeps (default 30s). */
   readonly reapIntervalMs?: number;
+  /** URL a freshly-created browser navigates to (default: none / about:blank). */
+  readonly homeUrl?: string;
   /** Injectable clock for deterministic reaper tests. */
   readonly now?: () => number;
 }
@@ -94,6 +96,10 @@ export interface BrowserService {
   input(browserId: string, viewerId: string, event: InputEvent): Promise<void>;
   /** TOOL-2: navigate the browser (CDP Page.navigate). */
   navigate(browserId: string, url: string): Promise<void>;
+  /** Reload the current page. */
+  reload(browserId: string): Promise<void>;
+  /** Go back one entry in history (no-op if none). */
+  goBack(browserId: string): Promise<void>;
   /** TOOL-4: model-safe page snapshot (url/title/text); never includes secrets. */
   snapshot(browserId: string): Promise<{ url: string; title: string; text: string }>;
   /** HOFF-1/2: enter awaiting-human state. */

@@ -92,13 +92,32 @@ describe('widget (React/DOM)', () => {
     expect(container.querySelector('[data-testid=awaiting-banner]')).toBeNull();
   });
 
-  it('INP-2: a canvas mousedown emits browser:input', async () => {
+  it('INP-2: a canvas tap (pointer) emits a click', async () => {
     await renderWidget(apiWithSession);
     const canvas = container.querySelector('canvas')!;
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1280, height: 800 }) as any;
-    await act(async () => { canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: 20, bubbles: true })); });
-    const input = fakeSocket.emitted.find((e: any) => e.event === 'browser:input' && e.payload.kind === 'mouse');
-    expect(input?.payload).toMatchObject({ browserId: 'br-1', type: 'mousePressed' });
+    await act(async () => {
+      canvas.dispatchEvent(new MouseEvent('pointerdown', { clientX: 10, clientY: 20, bubbles: true }));
+      canvas.dispatchEvent(new MouseEvent('pointerup', { clientX: 10, clientY: 20, bubbles: true }));
+    });
+    const press = fakeSocket.emitted.find((e: any) => e.event === 'browser:input' && e.payload.type === 'mousePressed');
+    expect(press?.payload).toMatchObject({ browserId: 'br-1', kind: 'mouse', type: 'mousePressed' });
+  });
+
+  it('keyboard: a key on the hidden textarea forwards a key event to the remote', async () => {
+    await renderWidget(apiWithSession);
+    const kb = container.querySelector('textarea')!;
+    await act(async () => { kb.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    const key = fakeSocket.emitted.find((e: any) => e.event === 'browser:input' && e.payload.kind === 'key');
+    expect(key?.payload).toMatchObject({ browserId: 'br-1', type: 'keyDown', key: 'Enter' });
+  });
+
+  it('keyboard button focuses the hidden textarea (raises the soft keyboard)', async () => {
+    await renderWidget(apiWithSession);
+    const kbBtn = Array.from(container.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === 'Keyboard')!;
+    const kb = container.querySelector('textarea')!;
+    await act(async () => { kbBtn.click(); });
+    expect(document.activeElement).toBe(kb);
   });
 
   it('RVL-2: unmount detaches and disconnects the socket', async () => {
