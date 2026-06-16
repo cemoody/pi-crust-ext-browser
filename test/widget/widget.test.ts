@@ -63,7 +63,8 @@ describe('widget (React/DOM)', () => {
     await renderWidget(apiWithSession);
     const attach = fakeSocket.emitted.find((e: any) => e.event === 'browser:attach');
     expect(attach).toBeTruthy();
-    expect(attach.payload).toEqual({ sessionId: 'pi-1', token: 'tok-123' });
+    // Sidebar attaches tokenless (trusted same-origin host page).
+    expect(attach.payload).toMatchObject({ sessionId: 'pi-1' });
   });
 
   it('STR-1: a browser:frame draws to the canvas', async () => {

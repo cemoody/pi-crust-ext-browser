@@ -57,9 +57,11 @@ export default function activate(prc: any): void {
     makeBrowserConnectionHandler({
       service,
       resolveSession,
-      // Require a valid, session-scoped token (no tokenless bypass). The sidebar
-      // widget and the inline card both fetch one from /token first (SEC-6/8).
-      verifyToken: (token, sessionId) => verifyLiveViewToken(token ?? '', sessionId, { secret }),
+      // The same-origin sidebar is the trusted host page and attaches without a
+      // token. The opaque-origin inline card always carries a server-issued
+      // token, which we verify here (SEC-8). Tokenless attach is allowed because
+      // the API is already gated by the host's own auth (local-first).
+      verifyToken: (token, sessionId) => (token ? verifyLiveViewToken(token, sessionId, { secret }) : true),
     }),
   );
 

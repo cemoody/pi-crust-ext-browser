@@ -32,18 +32,6 @@ async function resolveSessionId(api: any): Promise<string | null> {
   return null;
 }
 
-// Fetch a short-lived, session-scoped live-view token from the extension route.
-async function fetchToken(sessionId: string): Promise<string | undefined> {
-  try {
-    const res = await fetch(`/api/ext/browser/token?sessionId=${encodeURIComponent(sessionId)}`, { method: 'POST' });
-    if (!res.ok) return undefined;
-    const data = await res.json();
-    return typeof data?.token === 'string' ? data.token : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function BrowserViewer({ hostProps }: { hostProps: any }) {
   const React = hostProps.React;
   const { useEffect, useRef, useState } = React;
@@ -67,8 +55,9 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       const sessionId = await resolveSessionId(hostProps.api);
       if (!sessionId || disposed) { setStatus('no-session'); return; }
       sessionIdRef.current = sessionId;
-      const token = await fetchToken(sessionId);
-      // Same-origin gateway connection (DEPLOY-1).
+      // Same-origin gateway connection (DEPLOY-1). The sidebar is the trusted
+      // host page, so it attaches WITHOUT a token; only the opaque-origin inline
+      // card carries a server-issued token.
       const socket = io(resolveGatewayOrigin(window.location.origin), {
         path: gatewaySocketPath(),
         transports: ['websocket', 'polling'],
@@ -83,7 +72,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       // reconnects (each reconnect is a fresh server-side connection).
       const doAttach = async () => {
         try {
-          const r = await transport!.attach(sessionId, token);
+          const r = await transport!.attach(sessionId);
           if (disposed) { transport!.detach(r.browserId); return; }
           browserId = r.browserId;
           browserIdRef.current = r.browserId;
