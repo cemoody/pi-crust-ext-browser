@@ -52,9 +52,22 @@ describe('input-mapper', () => {
     expect(ev.text).toBe('A');
   });
 
-  it('INP-6: Enter is a non-text special key', () => {
+  it('INP-6: Enter is a non-text special key with a virtual key code', () => {
     const ev = keyEventToCdp({ kind: 'key', type: 'keyDown', key: 'Enter', code: 'Enter' });
     expect(ev.key).toBe('Enter');
     expect(ev.text).toBeUndefined();
+    expect(ev.windowsVirtualKeyCode).toBe(13);
+  });
+
+  it('INP-6: Backspace carries its virtual key code (so Chrome performs the delete)', () => {
+    const ev = keyEventToCdp({ kind: 'key', type: 'keyDown', key: 'Backspace', code: 'Backspace' });
+    expect(ev.windowsVirtualKeyCode).toBe(8);
+    expect(ev.text).toBeUndefined();
+  });
+
+  it('INP-5: printable letters carry both text and a VK code', () => {
+    const ev = keyEventToCdp({ kind: 'key', type: 'keyDown', key: 'a', code: 'KeyA' });
+    expect(ev.text).toBe('a');
+    expect(ev.windowsVirtualKeyCode).toBe(65);
   });
 });

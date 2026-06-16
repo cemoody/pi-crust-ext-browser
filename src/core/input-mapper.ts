@@ -14,6 +14,7 @@ export interface CdpKeyEvent {
   code?: string;
   text?: string;
   windowsVirtualKeyCode?: number;
+  nativeVirtualKeyCode?: number;
   modifiers: number;
 }
 
@@ -93,14 +94,33 @@ function modifierMask(m?: KeyInput['modifiers']): number {
   return (m.alt ? 1 : 0) | (m.ctrl ? 2 : 0) | (m.meta ? 4 : 0) | (m.shift ? 8 : 0);
 }
 
+// Virtual key codes for non-text keys. Chrome only performs the *action* of
+// keys like Backspace/Enter/Arrows/Tab when the event carries a virtual key
+// code — `key`/`text` alone is not enough.
+const VK: Record<string, number> = {
+  Backspace: 8, Tab: 9, Enter: 13, Shift: 16, Control: 17, Alt: 18, Escape: 27,
+  ' ': 32, PageUp: 33, PageDown: 34, End: 35, Home: 36,
+  ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46, Meta: 91,
+};
+function vkFor(key: string): number | undefined {
+  if (VK[key] !== undefined) return VK[key];
+  if (key.length === 1) {
+    const c = key.toUpperCase().charCodeAt(0);
+    if ((c >= 65 && c <= 90) || (c >= 48 && c <= 57)) return c; // A-Z, 0-9
+  }
+  return undefined;
+}
+
 /** Map a viewer key input to a CDP Input.dispatchKeyEvent payload. */
 export function keyEventToCdp(input: KeyInput): CdpKeyEvent {
   const isText = input.type === 'keyDown' && input.key.length === 1 && !NAMED_KEYS.has(input.key);
+  const vk = vkFor(input.key);
   return {
     type: input.type,
     key: input.key,
     ...(input.code ? { code: input.code } : {}),
     ...(isText ? { text: input.key } : {}),
+    ...(vk !== undefined ? { windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk } : {}),
     modifiers: modifierMask(input.modifiers),
   };
 }
