@@ -43,6 +43,7 @@ interface SessionState {
   onNav?: (p: any) => void;
   onCrash?: (p: any) => void;
   lastActivity: number;
+  lastMobile?: boolean;
 }
 
 export function createBrowserService(options: BrowserServiceOptions): BrowserService {
@@ -230,6 +231,22 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       await s.cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile });
       // Touch emulation so mobile sites use tap/scroll behavior.
       await s.cdp.send('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: mobile ? 5 : 0 }).catch(() => {});
+      // UA-sniffing sites (e.g. google.com) only serve their mobile layout for a
+      // mobile UA at load. Set a matching UA and reload once when the mobile
+      // state flips, so the page re-renders in the right layout (not a squished
+      // desktop page). Resizes that don't change the mode never reload.
+      if (mobile !== s.lastMobile) {
+        s.lastMobile = mobile;
+        if (mobile) {
+          await s.cdp.send('Emulation.setUserAgentOverride', {
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            platform: 'iPhone',
+          }).catch(() => {});
+        } else {
+          await s.cdp.send('Emulation.setUserAgentOverride', { userAgent: '' }).catch(() => {});
+        }
+        await s.cdp.send('Page.reload', {}).catch(() => {});
+      }
     },
 
     async reload(browserId: string): Promise<void> {
