@@ -179,8 +179,11 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       // tap → click the remote element, then raise the keyboard so typing works
       send({ kind: 'mouse', type: 'mousePressed', x: g.px, y: g.py, button: 'left', clickCount: 1 });
       send({ kind: 'mouse', type: 'mouseReleased', x: g.px, y: g.py, button: 'left', clickCount: 1 });
-      focusKeyboard();
     }
+    // Route the keyboard to the hidden textarea on every tap/click (mobile +
+    // desktop). Deferred a tick so it wins against the synthesized mouse events
+    // that fire after touch (which otherwise blur it and dismiss the keyboard).
+    setTimeout(focusKeyboard, 0);
   };
 
   // --- Soft + hardware keyboard: forwarded from the hidden textarea.
@@ -271,10 +274,12 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     }),
     React.createElement('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' } },
       React.createElement('canvas', {
-        ref: canvasRef, width: 1280, height: 800, tabIndex: 0, 'aria-label': 'Remote browser viewport',
+        ref: canvasRef, width: 1280, height: 800, 'aria-label': 'Remote browser viewport',
         style: { maxWidth: '100%', maxHeight: '100%', background: '#fff', cursor: 'crosshair', boxShadow: '0 0 0 1px #333', touchAction: 'none' },
         onPointerDown: onPointerDown, onPointerMove: onPointerMove, onPointerUp: onPointerUp, onPointerCancel: onPointerUp,
-        onKeyDown: onKbKeyDown, onKeyUp: onKbKeyUp, onBeforeInput: onKbBeforeInput,
+        // Prevent the (synthesized) mousedown from moving focus off the hidden
+        // textarea — that was dismissing the soft keyboard right after it opened.
+        onMouseDown: (e: any) => e.preventDefault(),
       }),
     ),
   );
