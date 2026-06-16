@@ -53,6 +53,9 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   const browserIdRef = useRef(null);
   const [status, setStatus] = useState('connecting');
   const [url, setUrl] = useState('');
+  const [awaiting, setAwaiting] = useState(null);
+  const [maximized, setMaximized] = useState(false);
+  const sessionIdRef = useRef(null);
 
   useEffect(() => {
     let disposed = false;
@@ -62,6 +65,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     (async () => {
       const sessionId = await resolveSessionId(hostProps.api);
       if (!sessionId || disposed) { setStatus('no-session'); return; }
+      sessionIdRef.current = sessionId;
       const token = await fetchToken(sessionId);
       // Same-origin gateway connection (DEPLOY-1).
       const socket = io(resolveGatewayOrigin(window.location.origin), {
@@ -84,7 +88,12 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
         };
         img.src = 'data:image/jpeg;base64,' + f.jpegB64;
       });
-      transport.onMeta((m) => { if (m.url) setUrl(m.url); });
+      transport.onMeta((m) => {
+        if (m.url) setUrl(m.url);
+        if (m.awaitingHuman) setAwaiting({ reason: m.reason || 'Sign in to continue' });
+        else if (m.awaitingHuman === false) setAwaiting(null);
+        if (m.closed) setStatus('closed');
+      });
 
       try {
         const r = await transport.attach(sessionId, token);
@@ -127,16 +136,33 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     ev.preventDefault();
   };
 
-  const dot = status === 'live' ? '#3c6' : status === 'connecting' ? '#da3' : '#e44';
-  return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#15151a' } },
+  // HOFF-6: clicking Resume tells the server the human is done signing in.
+  const resume = async () => {
+    const id = sessionIdRef.current;
+    if (!id) return;
+    try { await fetch(`/api/ext/browser/${encodeURIComponent(id)}/resume`, { method: 'POST' }); } catch { /* ignore */ }
+    setAwaiting(null);
+  };
+
+  const dot = status === 'live' ? '#3c6' : status === 'connecting' ? '#da3' : status === 'closed' ? '#e44' : '#e44';
+  const rootStyle = maximized
+    ? { position: 'fixed', inset: '0', zIndex: 2147483000, display: 'flex', flexDirection: 'column', background: '#15151a' }
+    : { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#15151a' };
+
+  return React.createElement('div', { className: 'pi-browser-widget', style: rootStyle, role: 'region', 'aria-label': 'Live remote browser' },
     React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', color: '#ddd', font: '12px system-ui', borderBottom: '1px solid #333' } },
-      React.createElement('span', { style: { width: 8, height: 8, borderRadius: '50%', background: dot, display: 'inline-block' } }),
+      React.createElement('span', { 'data-testid': 'status-dot', style: { width: 8, height: 8, borderRadius: '50%', background: dot, display: 'inline-block' } }),
       React.createElement('b', null, '🌐 Browser'),
-      React.createElement('span', { style: { opacity: 0.7, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, url || status),
+      React.createElement('span', { 'data-testid': 'url', style: { flex: 1, opacity: 0.7, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, url || status),
+      React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: { cursor: 'pointer', background: 'transparent', color: '#ddd', border: '1px solid #444', borderRadius: 4 } }, maximized ? '🗗' : '🗖'),
     ),
+    awaiting ? React.createElement('div', { 'data-testid': 'awaiting-banner', role: 'alert', style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#3a2f00', color: '#ffd', font: '12px system-ui' } },
+      React.createElement('span', null, `🔐 Agent is waiting — ${(awaiting as any).reason}`),
+      React.createElement('button', { onClick: resume, style: { cursor: 'pointer' } }, 'Done — resume'),
+    ) : null,
     React.createElement('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' } },
       React.createElement('canvas', {
-        ref: canvasRef, width: 1280, height: 800, tabIndex: 0,
+        ref: canvasRef, width: 1280, height: 800, tabIndex: 0, 'aria-label': 'Remote browser viewport',
         style: { maxWidth: '100%', maxHeight: '100%', background: '#fff', cursor: 'crosshair', boxShadow: '0 0 0 1px #333' },
         onMouseDown: onMouse('mousePressed'), onMouseUp: onMouse('mouseReleased'), onMouseMove: onMouse('mouseMoved'),
         onKeyDown: onKey('keyDown'), onKeyUp: onKey('keyUp'),
