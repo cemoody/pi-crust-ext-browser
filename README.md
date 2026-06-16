@@ -17,7 +17,7 @@ Implementation proceeds **red → green** against the criterion IDs.
 npm test            # vitest run (fast suite: unit + contract + widget stubs)
 ```
 
-Current state (`31 passed | 19 failing (red) | 49 todo`, tsc clean):
+Current state (`50 passed | 49 todo`, tsc clean):
 
 **Phase 1 — core brain (green):**
 - ✅ `input-mapper` (INP-1/3/5/6) — 7 green.
@@ -25,13 +25,14 @@ Current state (`31 passed | 19 failing (red) | 49 todo`, tsc clean):
 - ✅ `handoff` (HOFF-*) — 6 green.
 - ✅ `redaction` (TOOL-5/SEC-3) — 4 green.
 
-**Phase 2 — make it real (RED, the transport + wiring):**
-- 🔴 `transport` (DEPLOY-1) — same-origin URL helpers.
-- 🔴 `live-view-token` (SEC-8/DEPLOY-2) — session-scoped tokens.
-- 🔴 `cdp-playwright` (CDP-1/2/3) — real CDP adapter incl. navigation/target follow.
-- 🔴 `browser-gateway` (GW-1/2/3, MUX-2 wire) — browser:* onConnection wiring.
-- ⏳ `todo`: widget transport (W-GW), tools (fake-pi), perf/resilience, e2e
-  (real browser: CDP-2/4, DEPLOY-1/2).
+**Phase 2 — transport + wiring (green):**
+- ✅ `transport` (DEPLOY-1) — same-origin URL helpers.
+- ✅ `live-view-token` (SEC-8/DEPLOY-2) — HMAC session-scoped tokens.
+- ✅ `cdp-playwright` (CDP-1/2/3) — real CDP adapter incl. navigation/target follow;
+  `createPlaywrightCdpFactory` (CDP-4) connects to `CDP_URL` or launches headful.
+- ✅ `browser-gateway` (GW-1/2/3, MUX-2 wire) — browser:* onConnection wiring.
+- ⏳ `todo`: widget transport swap (W-GW), tools (fake-pi), perf/resilience, and the
+  real-browser e2e (CDP-2/4, DEPLOY-1/2 end-to-end).
 
 Full catalog + phasing: `docs/ACCEPTANCE-CRITERIA.md` (Phase 2 section), `docs/TEST-PLAN.md`.
 
@@ -54,10 +55,9 @@ Chromium + Xvfb); wire it into the browser-enabled CI job.
 
 1. ✅ `BrowserService` against `FakeCdpSession` (`browser-service` + `handoff` green).
 2. ✅ `redactSnapshot` (`redaction` green).
-3. **CDP adapter** (`src/core/cdp-playwright.ts`) → greens `cdp-playwright` (CDP-1/2/3).
-4. **Token + transport helpers** (`live-view-token.ts`, `transport.ts`) → greens
-   `live-view-token` + `transport` (SEC-8/DEPLOY-1/2).
-5. **Gateway wiring** (`src/prc/realtime.ts`) → greens `browser-gateway` (GW-1/2/3).
+3. ✅ **CDP adapter** (`src/core/cdp-playwright.ts`) — `cdp-playwright` green (CDP-1/2/3).
+4. ✅ **Token + transport helpers** (`live-view-token.ts`, `transport.ts`) — green (SEC-8/DEPLOY-1/2).
+5. ✅ **Gateway wiring** (`src/prc/realtime.ts`) — `browser-gateway` green (GW-1/2/3).
 6. **Widget transport swap** → same-origin browser:* client; fill `widget-transport` todos.
 7. `pi.extensions` tools (RPC) + live-view/resume routes → tools `it.todo`s.
 8. Real-browser golden e2e (headless + headful) → CDP-2/4, DEPLOY-1/2.
