@@ -31,8 +31,24 @@ Current state (`50 passed | 49 todo`, tsc clean):
 - ✅ `cdp-playwright` (CDP-1/2/3) — real CDP adapter incl. navigation/target follow;
   `createPlaywrightCdpFactory` (CDP-4) connects to `CDP_URL` or launches headful.
 - ✅ `browser-gateway` (GW-1/2/3, MUX-2 wire) — browser:* onConnection wiring.
-- ⏳ `todo`: widget transport swap (W-GW), tools (fake-pi), perf/resilience, and the
-  real-browser e2e (CDP-2/4, DEPLOY-1/2 end-to-end).
+
+**Phase 3 — wired + running (green):**
+- ✅ `widget-transport` (W-GW) — `gateway-client` rides the shared socket; bundled
+  `widget.mjs` (sidebar) + `live-card.js` (Tier-B inline card) via esbuild.
+- ✅ `routes` (GW-4) — token / live-view / resume / navigate handlers.
+- ✅ `server-activate` (HOST-1) — `activate()` wires realtime + factory + routes.
+- ✅ `login-artifact` (HOFF-2) + `pi` tools — browser_open/navigate/request_login/wait_for_human.
+- ⏳ `todo`: jsdom widget DOM tests, perf/resilience budgets, and the headful e2e job.
+
+### Verified live
+Runs inside pi-crust on its OWN realtime gateway (no standalone server): the
+sidebar **Browser** activity streams a remote Chromium (via `PI_CRUST_BROWSER_CDP_URL`
+→ `connectOverCDP`) over `browser:*`; attach ack + JPEG frames confirmed end-to-end.
+
+### Configuration (env)
+- `PI_CRUST_BROWSER_CDP_URL` — remote browser CDP endpoint (else launches headful).
+- `PI_CRUST_BROWSER_SECRET` — shared secret for live-view tokens.
+- `PI_CRUST_BROWSER_HEADLESS=1` — launch headless instead of headful.
 
 Full catalog + phasing: `docs/ACCEPTANCE-CRITERIA.md` (Phase 2 section), `docs/TEST-PLAN.md`.
 

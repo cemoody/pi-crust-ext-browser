@@ -116,8 +116,14 @@ export interface PlaywrightCdpFactoryOptions {
 export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): CdpFactory {
   return {
     async create(_piSessionId: string) {
-      // Lazy import keeps playwright optional for unit tests.
-      const { chromium } = (await import('playwright')) as typeof import('playwright');
+      // Lazy import keeps playwright optional for unit tests (and avoids a hard
+      // type dependency on the package). Prefer playwright-core (no bundled
+      // browsers; connectOverCDP needs none). Typed loosely on purpose.
+      const load = async (): Promise<any> => {
+        try { return await import('playwright-core' as string); }
+        catch { return await import('playwright' as string); }
+      };
+      const { chromium } = (await load()) as any;
       const browser = opts.cdpUrl
         ? await chromium.connectOverCDP(opts.cdpUrl)
         : await chromium.launch({ headless: opts.launch?.headless ?? false });
@@ -129,7 +135,7 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
       // Track the active page; switch to a newly-opened page (CDP-2 new tab).
       const targetHandlers = new Set<() => void>();
       let raw = await context.newCDPSession(page);
-      context.on('page', async (p) => {
+      context.on('page', async (p: any) => {
         page = p;
         raw = await context.newCDPSession(page);
         for (const h of [...targetHandlers]) h();

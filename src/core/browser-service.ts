@@ -162,6 +162,11 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       await dispatch(s, event);
     },
 
+    async navigate(browserId: string, url: string): Promise<void> {
+      const s = require(browserId);
+      await s.cdp.send('Page.navigate', { url });
+    },
+
     requestLogin(browserId: string, reason: string): void {
       const s = require(browserId);
       s.awaitingHuman = true; // HOFF-1

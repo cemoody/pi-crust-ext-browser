@@ -85,6 +85,8 @@ export interface BrowserService {
   detach(browserId: string, viewerId: string): Promise<void>;
   /** SEC-1: viewer must own (have attached) the browserId. */
   input(browserId: string, viewerId: string, event: InputEvent): Promise<void>;
+  /** TOOL-2: navigate the browser (CDP Page.navigate). */
+  navigate(browserId: string, url: string): Promise<void>;
   /** HOFF-1/2: enter awaiting-human state. */
   requestLogin(browserId: string, reason: string): void;
   /** HOFF-3/4/5: resolves on resume, rejects on timeout/cancel. */

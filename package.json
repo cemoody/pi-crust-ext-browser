@@ -12,11 +12,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.build.json",
+    "build:web": "node scripts/build-web.mjs",
+    "build": "tsc -p tsconfig.build.json && npm run build:web",
     "prepublishOnly": "npm run build && npm test"
   },
   "pi": {
-    "extensions": ["./src/pi/index.ts"]
+    "extensions": [
+      "./src/pi/index.ts"
+    ]
   },
   "piCrust": {
     "extension": "./src/prc/server.ts",
@@ -50,8 +53,13 @@
   "bugs": {
     "url": "https://github.com/cemoody/pi-crust-ext-browser/issues"
   },
+  "dependencies": {
+    "playwright-core": "^1.59.0",
+    "socket.io-client": "^4.7.5"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0"
   }
