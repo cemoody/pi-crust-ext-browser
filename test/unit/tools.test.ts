@@ -64,4 +64,20 @@ describe('LLM tools', () => {
     expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-1/wait');
     expect(out.content[0].text).toMatch(/signed in/i);
   });
+
+  // Runs LAST: it sets the module-level captured session id, which would leak
+  // into earlier tests that rely on the ctx fallback.
+  it('TOOL-8: session id captured from the session_start event is used for RPC', async () => {
+    const tools = new Map<string, any>();
+    let handler: ((e: unknown, c: any) => void) | undefined;
+    browserPiExtension({
+      on: (evt: string, cb: any) => { if (evt === 'session_start') handler = cb; },
+      registerTool: (t: any) => tools.set(t.name, t),
+    } as any);
+    expect(handler).toBeTypeOf('function');
+    handler!(undefined, { sessionManager: { getSessionId: () => 'pi-from-event' } });
+    // execute with NO session in ctx — must use the captured id.
+    await tools.get('browser_navigate').execute('id', { url: 'https://x.test' }, undefined);
+    expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-from-event/navigate');
+  });
 });

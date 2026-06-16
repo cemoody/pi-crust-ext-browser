@@ -14,8 +14,13 @@ import { buildLoginArtifact } from '../prc/login-artifact.js';
 
 const apiBase = () => process.env.PI_CRUST_API_BASE ?? 'http://127.0.0.1:8787';
 
-function sessionIdOf(ctx: any): string | undefined {
-  return ctx?.sessionId ?? ctx?.session?.id ?? process.env.PI_CRUST_BROWSER_SESSION_ID;
+// The session id is NOT passed to tool.execute(); pi extensions learn it from
+// the `session_start` event (see pi-crust-artifacts). We capture it once and
+// reuse it for every RPC. Env var stays as a cross-process fallback.
+let capturedSessionId: string | undefined;
+
+function sessionIdOf(ctx?: any): string | undefined {
+  return capturedSessionId ?? ctx?.sessionId ?? ctx?.session?.id ?? process.env.PI_CRUST_BROWSER_SESSION_ID;
 }
 
 async function rpc(path: string, body: unknown): Promise<any> {
@@ -29,6 +34,18 @@ async function rpc(path: string, body: unknown): Promise<any> {
 }
 
 export default function browserPiExtension(pi: any): void {
+  try {
+    const onAny = (pi as any).on;
+    if (typeof onAny === 'function') {
+      onAny.call(pi, 'session_start', (_event: unknown, ctx: any) => {
+        const sid = ctx?.sessionManager?.getSessionId?.() ?? ctx?.sessionId ?? ctx?.session?.id;
+        if (typeof sid === 'string' && sid) capturedSessionId = sid;
+      });
+    }
+  } catch {
+    // pi runtime doesn't expose `on` in some test harnesses; env fallback applies.
+  }
+
   pi.registerTool?.({
     name: 'browser_open',
     label: 'Open browser',
