@@ -263,7 +263,17 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   };
 
   const dot = status === 'live' ? '#3c6' : status === 'connecting' ? '#da3' : status === 'closed' ? '#e44' : '#e44';
-  const btnStyle = { flexShrink: 0, width: 32, height: 32, padding: 0, cursor: 'pointer', background: '#fff', color: '#5f6368', border: '1px solid #dadce0', borderRadius: 8, fontSize: 15, lineHeight: '1' };
+  const btnStyle = { flexShrink: 0, width: 34, height: 34, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#fff', color: '#5f6368', border: '1px solid #dadce0', borderRadius: 8 };
+  // Crisp, consistent line icons (no emoji — they render inconsistently per OS).
+  const svg = (...children: any[]) => React.createElement('svg', { width: 17, height: 17, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, ...children);
+  const P = (d: string) => React.createElement('path', { d });
+  const icons: Record<string, any> = {
+    back: svg(P('M10 3 L5 8 L10 13')),
+    reload: svg(P('M12.5 5.5 A4.5 4.5 0 1 0 13 9'), P('M12.8 2.6 L12.8 5.6 L9.8 5.6')),
+    keyboard: svg(React.createElement('rect', { x: 1.5, y: 4, width: 13, height: 8, rx: 1.3 }), P('M6 9.5 L10 9.5')),
+    expand: svg(P('M6 2.5H2.5V6'), P('M10 2.5h3.5V6'), P('M6 13.5H2.5V10'), P('M10 13.5h3.5V10')),
+    collapse: svg(P('M2.5 6H6V2.5'), P('M13.5 6H10V2.5'), P('M2.5 10H6V13.5'), P('M13.5 10H10V13.5')),
+  };
   const rootStyle = maximized
     ? { position: 'fixed', inset: '0', zIndex: 2147483000, display: 'flex', flexDirection: 'column', background: '#15151a' }
     : { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#15151a' };
@@ -272,10 +282,13 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     // Header padded to clear the host's floating corner controls (sidebar
     // toggle on the left, menu on the right) — important on mobile where they
     // overlay the panel. The URL field is a rounded search pill.
-    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '8px 8px', paddingLeft: maximized ? 12 : 58, paddingRight: maximized ? 12 : 50, paddingTop: maximized ? 'calc(8px + env(safe-area-inset-top, 0px))' : 8, minHeight: 52, boxSizing: 'border-box', color: '#202124', font: '13px system-ui', borderBottom: '1px solid #dadce0', background: '#f1f3f4' } },
+    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', paddingLeft: maximized ? 12 : 58, paddingRight: 10, paddingTop: maximized ? 'calc(8px + env(safe-area-inset-top, 0px))' : 8, minHeight: 52, boxSizing: 'border-box', color: '#202124', font: '13px system-ui', borderBottom: '1px solid #dadce0', background: '#f1f3f4' } },
+      // Maximize/restore on the LEFT, matching the host's sidebar-toggle side + line-icon style.
+      React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', title: maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: btnStyle }, maximized ? icons.collapse : icons.expand),
+      React.createElement('button', { 'aria-label': 'Back', title: 'Back', onClick: ctrlAction('back'), style: btnStyle }, icons.back),
+      React.createElement('button', { 'aria-label': 'Reload', title: 'Reload', onClick: ctrlAction('reload'), style: btnStyle }, icons.reload),
       React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 14px', background: '#fff', border: '1px solid #dadce0', borderRadius: 999, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)' } },
         React.createElement('span', { 'data-testid': 'status-dot', title: status, style: { flexShrink: 0, width: 9, height: 9, borderRadius: '50%', background: dot, display: 'inline-block' } }),
-        React.createElement('span', { 'aria-hidden': 'true', style: { flexShrink: 0, opacity: 0.55, fontSize: 13 } }, '🔍'),
         React.createElement('input', {
           'data-testid': 'url', value: urlInput, inputMode: 'url', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false,
           placeholder: status === 'live' ? 'Search or enter address' : status,
@@ -286,10 +299,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
           style: { flex: 1, minWidth: 0, background: 'transparent', color: '#202124', border: 'none', padding: 0, font: '14px system-ui', outline: 'none' },
         }),
       ),
-      React.createElement('button', { 'aria-label': 'Back', title: 'Back', onClick: ctrlAction('back'), style: btnStyle }, '‹'),
-      React.createElement('button', { 'aria-label': 'Reload', title: 'Reload', onClick: ctrlAction('reload'), style: btnStyle }, '↻'),
-      React.createElement('button', { 'aria-label': 'Keyboard', title: 'Show keyboard', onClick: focusKeyboard, style: btnStyle }, '⌨'),
-      React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: btnStyle }, maximized ? '🗗' : '🗖'),
+      React.createElement('button', { 'aria-label': 'Keyboard', title: 'Show keyboard', onClick: focusKeyboard, style: btnStyle }, icons.keyboard),
     ),
     awaiting ? React.createElement('div', { 'data-testid': 'awaiting-banner', role: 'alert', style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#3a2f00', color: '#ffd', font: '12px system-ui' } },
       React.createElement('span', null, `🔐 Agent is waiting — ${(awaiting as any).reason}`),
