@@ -15,3 +15,11 @@ describe('golden e2e (real browser)', () => {
   it.todo('E/visual-smoke (soft): one decoded frame on a known page is non-blank (region hash)');
   it.todo('E/headful: the whole suite also passes under Xvfb (headful Chromium)');
 });
+
+describe('golden e2e — real CDP adapter & deployment', () => {
+  it.todo('E/CDP-2: drive a real page through a cross-document navigation → viewer keeps streaming the new page');
+  it.todo('E/CDP-2: open a second tab → the active-target follow streams the new tab');
+  it.todo('E/CDP-4: createPlaywrightCdpFactory against a launched headful Chromium (Xvfb) streams + accepts input');
+  it.todo('E/DEPLOY-1: served behind a reverse proxy on a non-localhost origin, the widget still streams (same-origin)');
+  it.todo('E/DEPLOY-2: the sandboxed inline-card iframe authenticates with its token and streams over the gateway');
+});
