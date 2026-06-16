@@ -113,6 +113,19 @@ export interface PlaywrightCdpFactoryOptions {
  * tracks the active page (so createCdpAdapter can follow navigations/new tabs),
  * then adapts it.
  */
+// Best-effort anti-detection patches injected before page scripts run. These
+// mask the most common automation tells (navigator.webdriver, missing
+// chrome/plugins/languages, headless WebGL vendor). They reduce *fingerprint*
+// detection; they do NOT change your IP — datacenter IPs still get CAPTCHA'd.
+const STEALTH_SCRIPT = `(() => {
+  try { Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true }); } catch (e) {}
+  try { window.chrome = window.chrome || { runtime: {}, app: {}, csi: function(){}, loadTimes: function(){} }; } catch (e) {}
+  try { Object.defineProperty(navigator, 'languages', { get: () => ['en-US','en'] }); } catch (e) {}
+  try { Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] }); } catch (e) {}
+  try { const q = navigator.permissions && navigator.permissions.query; if (q) navigator.permissions.query = (p) => (p && p.name === 'notifications') ? Promise.resolve({ state: (typeof Notification !== 'undefined' ? Notification.permission : 'denied') }) : q.call(navigator.permissions, p); } catch (e) {}
+  try { const patch = (proto) => { if (!proto) return; const gp = proto.getParameter; proto.getParameter = function(p){ if (p === 37445) return 'Intel Inc.'; if (p === 37446) return 'Intel Iris OpenGL Engine'; return gp.call(this, p); }; }; patch(window.WebGLRenderingContext && WebGLRenderingContext.prototype); patch(window.WebGL2RenderingContext && WebGL2RenderingContext.prototype); } catch (e) {}
+})();`;
+
 export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): CdpFactory {
   return {
     async create(_piSessionId: string) {
@@ -126,9 +139,15 @@ export function createPlaywrightCdpFactory(opts: PlaywrightCdpFactoryOptions): C
       const { chromium } = (await load()) as any;
       const browser = opts.cdpUrl
         ? await chromium.connectOverCDP(opts.cdpUrl)
-        : await chromium.launch({ headless: opts.launch?.headless ?? true });
+        : await chromium.launch({
+            headless: opts.launch?.headless ?? true,
+            args: ['--disable-blink-features=AutomationControlled'],
+            ignoreDefaultArgs: ['--enable-automation'],
+          });
 
       const context = browser.contexts()[0] ?? (await browser.newContext());
+      // Inject stealth patches into every page/frame before site scripts run.
+      try { await context.addInitScript({ content: STEALTH_SCRIPT }); } catch { /* connected contexts may not allow it */ }
       const ensurePage = async () => context.pages()[0] ?? (await context.newPage());
       let page = await ensurePage();
 

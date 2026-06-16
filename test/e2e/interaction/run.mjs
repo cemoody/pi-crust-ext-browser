@@ -104,6 +104,12 @@ const type = async (s) => { await upage.keyboard.type(s, { delay: 30 }); await s
 try {
   note('load', (await remoteEval(() => document.title)) === 'Test Page', `remote title = ${await remoteEval(() => document.title)}`);
 
+  // STEALTH: automation tells should be masked on the remote page.
+  const wd = await remoteEval(() => navigator.webdriver);
+  note('stealth-webdriver', wd === false, `navigator.webdriver = ${wd} (want false)`);
+  const langs = await remoteEval(() => navigator.languages?.length || 0);
+  note('stealth-languages', langs > 0, `navigator.languages length = ${langs}`);
+
   // FLOW 1: search box — type, verify, backspace, verify, submit (Enter)
   await clickRemote('#q');
   await type('hello world');

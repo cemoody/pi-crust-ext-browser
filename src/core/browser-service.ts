@@ -242,9 +242,11 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       if (mobile !== s.lastMobile) {
         s.lastMobile = mobile;
         if (mobile) {
+          // Use an Android *Chrome* UA: the engine really is Blink, so this is
+          // consistent (an iPhone/Safari UA on Blink is an obvious bot tell).
           await s.cdp.send('Emulation.setUserAgentOverride', {
-            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-            platform: 'iPhone',
+            userAgent: process.env.PI_CRUST_BROWSER_UA ?? 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
+            platform: 'Linux armv8l',
           }).catch(() => {});
         } else {
           await s.cdp.send('Emulation.setUserAgentOverride', { userAgent: '' }).catch(() => {});
