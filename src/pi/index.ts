@@ -67,14 +67,10 @@ export default function browserPiExtension(pi: any): void {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
       const reason = typeof params?.reason === 'string' && params.reason ? params.reason : 'Sign in to continue';
-      // Ask the server to mint a session-scoped token (no shared secret needed).
-      const res = await fetch(`${apiBase()}/api/ext/browser/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
-      });
-      if (!res.ok) throw new Error(`could not mint live-view token: ${res.status}`);
-      const { token } = await res.json();
+      // Tell the server to enter awaiting-human (shows the banner to viewers) and
+      // mint a session-scoped token for the inline card.
+      const { token } = await rpc(`/${encodeURIComponent(sessionId)}/request-login`, { reason });
+      if (!token) throw new Error('server did not return a live-view token');
       return buildLoginArtifact(sessionId, reason, { token });
     },
   });
@@ -97,11 +93,12 @@ export default function browserPiExtension(pi: any): void {
     label: 'Wait for human',
     description: 'Block until the human clicks Resume in the live browser card (after signing in).',
     parameters: obj({ timeoutMs: { type: 'number' } }),
-    async execute(_id: string, _params: any, ctx: any) {
+    async execute(_id: string, params: any, ctx: any) {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
-      const r = await rpc(`/${encodeURIComponent(sessionId)}/resume`, {});
-      return { content: [{ type: 'text', text: r?.resumed ? 'Human signed in; resuming.' : 'No pending sign-in.' }] };
+      // Blocks server-side until the human clicks Resume in the card (or timeout).
+      const r = await rpc(`/${encodeURIComponent(sessionId)}/wait`, { timeoutMs: params?.timeoutMs });
+      return { content: [{ type: 'text', text: r?.resumed ? 'Human signed in; resuming.' : 'Sign-in not completed (timed out or no pending request).' }] };
     },
   });
 }

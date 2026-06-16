@@ -37,6 +37,8 @@ describe('server activate (HOST-1 / wiring)', () => {
     expect(routePaths).toEqual(expect.arrayContaining([
       'POST /api/ext/browser/token',
       'GET /api/ext/browser/live/:sessionId',
+      'POST /api/ext/browser/:sessionId/request-login',
+      'POST /api/ext/browser/:sessionId/wait',
       'POST /api/ext/browser/:sessionId/resume',
       'POST /api/ext/browser/:sessionId/navigate',
       'POST /api/ext/browser/:sessionId/snapshot',
@@ -53,14 +55,14 @@ describe('pi tools registration', () => {
     ]));
   });
 
-  it('browser_request_login mints a token from the server and returns a kind:html artifact', async () => {
+  it('browser_request_login calls /request-login and returns a kind:html artifact', async () => {
     let loginTool: any;
     browserPiExtension({ registerTool: (t: any) => { if (t.name === 'browser_request_login') loginTool = t; } } as any);
     const calls: string[] = [];
     vi.stubGlobal('fetch', async (u: string) => { calls.push(String(u)); return { ok: true, json: async () => ({ token: 'tok-srv' }) } as any; });
     try {
       const out = await loginTool.execute('id', { reason: 'GitHub' }, { sessionId: 'pi-9' });
-      expect(calls.some((u) => u.includes('/api/ext/browser/token'))).toBe(true);
+      expect(calls.some((u) => u.includes('/api/ext/browser/pi-9/request-login'))).toBe(true);
       expect(out.details.piRemoteControlArtifact.kind).toBe('html');
       expect(out.details.piRemoteControlArtifact.url).toContain('pi-9');
       expect(out.details.piRemoteControlArtifact.url).toContain('tok-srv');

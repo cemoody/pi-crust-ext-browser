@@ -52,6 +52,32 @@ describe('resilience & lifecycle', () => {
     expect(cdpFactory.sessions.get('pi-1')!.callsTo('Page.navigate')).toHaveLength(1);
   });
 
+  it('LIFE-5: the idle reaper closes a browser with no viewers + no activity', async () => {
+    let clock = 1_000;
+    const cdpFactory = new FakeCdpFactory();
+    const service = createBrowserService({ cdpFactory, idleMs: 5_000, reapIntervalMs: 1_000, now: () => clock });
+    const id = await service.openSession('pi-idle');
+    expect(service.hasSession('pi-idle')).toBe(true);
+    clock += 10_000; // advance past idleMs
+    await new Promise((r) => setTimeout(r, 1_200)); // let one reap interval fire
+    expect(service.hasSession('pi-idle')).toBe(false);
+    expect(cdpFactory.closed).toContain('pi-idle');
+    expect(service.isScreencasting(id)).toBe(false);
+    await service.dispose();
+  });
+
+  it('LIFE-5: a browser WITH a viewer is not reaped', async () => {
+    let clock = 1_000;
+    const cdpFactory = new FakeCdpFactory();
+    const service = createBrowserService({ cdpFactory, idleMs: 5_000, reapIntervalMs: 1_000, now: () => clock });
+    const id = await service.openSession('pi-live');
+    await service.attach(id, new RecordingViewer('v1'));
+    clock += 10_000;
+    await new Promise((r) => setTimeout(r, 1_200));
+    expect(service.hasSession('pi-live')).toBe(true);
+    await service.dispose();
+  });
+
   it.todo('PERF-3 (e2e, soft): input→observable DOM change < 300ms locally');
   it.todo('PERF-4 (e2e): median JPEG frame under the configured byte cap');
   it.todo('LIFE-6 (e2e): Chromium crash → factory relaunches on retry');

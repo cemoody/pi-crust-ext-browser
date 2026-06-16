@@ -39,6 +39,21 @@ Current state (`50 passed | 49 todo`, tsc clean):
 - ✅ `server-activate` (HOST-1) — `activate()` wires realtime + factory + routes.
 - ✅ `login-artifact` (HOFF-2) + `pi` tools — open/navigate/snapshot/request_login/wait_for_human.
 
+**Phase 5 — review fixes (0.0.3):**
+- ✅ **Idle reaper (LIFE-5)** — browsers with no viewers + no activity are closed
+  after `idleMs` (default 5 min); `dispose()` tears everything down. Fixes a real
+  per-session Chromium/CDP leak (nothing called `closeSession` before).
+- ✅ **Handoff actually blocks** — `browser_request_login` now hits `/request-login`
+  (sets awaiting-human + shows the banner) and `browser_wait_for_human` blocks on
+  `/wait` until the human clicks Resume. Previously the tool called `/resume`
+  itself, so the LLM never paused and the banner never showed.
+- ✅ **Token required at the gateway (SEC-6/8)** — removed the tokenless-attach
+  bypass; every attach needs a valid session-scoped token (the widget + card both
+  fetch one).
+- ✅ **Reconnect re-attaches (RES-1)** — the widget re-attaches on every socket
+  (re)connect, so the stream survives socket.io reconnects.
+- ✅ `resume`/`wait` no longer spawn a Chromium for a session that has none.
+
 **Phase 4 — hardening (green):**
 - ✅ `pacing` (PERF-1/2, RES-5) — latest-wins frame pacer + pointer-move coalescer
   (wired into the widget transport).

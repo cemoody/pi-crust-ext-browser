@@ -42,6 +42,7 @@ interface SessionState {
   onFrame?: (p: any) => void;
   onNav?: (p: any) => void;
   onCrash?: (p: any) => void;
+  lastActivity: number;
 }
 
 export function createBrowserService(options: BrowserServiceOptions): BrowserService {
@@ -49,10 +50,15 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
   const quality = options.jpegQuality ?? 60;
   const maxWidth = options.maxWidth ?? 1280;
   const maxSessions = options.maxSessions ?? Infinity;
+  const idleMs = options.idleMs ?? 5 * 60 * 1000;
+  const reapIntervalMs = options.reapIntervalMs ?? 30 * 1000;
+  const now = options.now ?? Date.now;
 
   const byBrowserId = new Map<string, SessionState>();
   const browserIdByPi = new Map<string, string>();
   let nextId = 1;
+
+  const touch = (s: SessionState): void => { s.lastActivity = now(); };
 
   const require = (browserId: string): SessionState => {
     const s = byBrowserId.get(browserId);
@@ -118,6 +124,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
   };
 
   const dispatch = async (s: SessionState, event: InputEvent): Promise<void> => {
+    touch(s);
     if (event.kind === 'mouse') {
       await s.cdp.send('Input.dispatchMouseEvent', mouseEventToCdp(event) as any);
     } else if (event.kind === 'key') {
@@ -126,6 +133,32 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       await s.cdp.send('Input.insertText', { text: event.text });
     }
   };
+
+  // Tear down one browser fully (used by closeSession + the idle reaper).
+  const closeState = async (s: SessionState): Promise<void> => {
+    await stopScreencast(s).catch(() => {});
+    for (const w of s.waiters) { if (w.timer) clearTimeout(w.timer); w.reject(new BrowserError('BROWSER_CLOSED', 'browser closed')); }
+    s.waiters = [];
+    byBrowserId.delete(s.browserId);
+    browserIdByPi.delete(s.piSessionId);
+    await s.close().catch(() => {});
+  };
+
+  // LIFE-5: reap browsers with no viewers + no activity (and not awaiting a
+  // human) so we never leak Chromiums/CDP connections across sessions.
+  let reaper: ReturnType<typeof setInterval> | undefined;
+  if (idleMs > 0) {
+    reaper = setInterval(() => {
+      const cutoff = now() - idleMs;
+      for (const s of [...byBrowserId.values()]) {
+        if (s.viewers.size === 0 && !s.awaitingHuman && s.lastActivity < cutoff) {
+          void closeState(s);
+        }
+      }
+    }, reapIntervalMs);
+    // Don't keep the process alive just for the reaper.
+    (reaper as any).unref?.();
+  }
 
   return {
     async openSession(piSessionId: string): Promise<string> {
@@ -146,6 +179,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
         seq: 0,
         awaitingHuman: false,
         waiters: [],
+        lastActivity: now(),
       });
       browserIdByPi.set(piSessionId, browserId);
       return browserId;
@@ -155,6 +189,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       const s = require(browserId); // ERR-1
       if (s.viewers.has(viewer.id)) return; // ERR-2: idempotent
       s.viewers.set(viewer.id, viewer);
+      touch(s);
       await startScreencast(s); // STR-1 (first attach only)
     },
 
@@ -177,6 +212,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
 
     async navigate(browserId: string, url: string): Promise<void> {
       const s = require(browserId);
+      touch(s);
       await s.cdp.send('Page.navigate', { url });
     },
 
@@ -192,6 +228,7 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
 
     requestLogin(browserId: string, reason: string): void {
       const s = require(browserId);
+      touch(s);
       s.awaitingHuman = true; // HOFF-1
       s.reason = reason;
       fanMeta(s, { awaitingHuman: true, reason });
@@ -236,13 +273,16 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       const browserId = browserIdByPi.get(piSessionId);
       if (!browserId) return;
       const s = byBrowserId.get(browserId);
-      if (s) {
-        await stopScreencast(s).catch(() => {});
-        for (const w of s.waiters) if (w.timer) clearTimeout(w.timer);
-        await s.close(); // LIFE-3: dispose underlying browser
-      }
-      byBrowserId.delete(browserId);
-      browserIdByPi.delete(piSessionId);
+      if (s) await closeState(s); // LIFE-3: dispose underlying browser
+    },
+
+    hasSession(piSessionId: string): boolean {
+      return browserIdByPi.has(piSessionId);
+    },
+
+    async dispose(): Promise<void> {
+      if (reaper) clearInterval(reaper);
+      for (const s of [...byBrowserId.values()]) await closeState(s);
     },
 
     isScreencasting(browserId: string): boolean {

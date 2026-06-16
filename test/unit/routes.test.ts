@@ -66,4 +66,31 @@ describe('browser routes', () => {
     expect(res.status).toBe(200);
     expect(cdpFactory.sessions.get('pi-1')!.callsTo('Page.navigate')).toHaveLength(1);
   });
+
+  it('HOFF-1: request-login sets awaiting + returns a session-bound token', async () => {
+    const { routes, service } = setup();
+    const res = await routes.requestLogin(req({ params: { sessionId: 'pi-1' }, body: { reason: 'GitHub' } }));
+    expect(res.status).toBe(200);
+    const token = (res.body as any).token as string;
+    expect(verifyLiveViewToken(token, 'pi-1', { secret })).toBe(true);
+    const browserId = await service.openSession('pi-1');
+    expect(service.isAwaitingHuman(browserId)).toBe(true);
+  });
+
+  it('HOFF-3: wait blocks until resume, then resolves', async () => {
+    const { routes } = setup();
+    await routes.requestLogin(req({ params: { sessionId: 'pi-1' }, body: { reason: 'x' } }));
+    const waiting = routes.wait(req({ params: { sessionId: 'pi-1' }, body: { timeoutMs: 1000 } }));
+    await new Promise((r) => setTimeout(r, 10)); // let wait register its waiter
+    const resumed = await routes.resume(req({ params: { sessionId: 'pi-1' } }));
+    expect(resumed.body).toEqual({ resumed: true });
+    expect((await waiting).body).toEqual({ resumed: true });
+  });
+
+  it('wait/resume on a session with no browser are no-ops (no spurious Chromium)', async () => {
+    const { routes, service } = setup();
+    expect((await routes.resume(req({ params: { sessionId: 'pi-1' } }))).body).toEqual({ resumed: false });
+    expect((await routes.wait(req({ params: { sessionId: 'pi-1' }, body: {} }))).body).toEqual({ resumed: false });
+    expect(service.hasSession('pi-1')).toBe(false);
+  });
 });

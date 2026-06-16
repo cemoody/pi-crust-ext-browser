@@ -57,13 +57,17 @@ export default function activate(prc: any): void {
     makeBrowserConnectionHandler({
       service,
       resolveSession,
-      verifyToken: (token, sessionId) => (token ? verifyLiveViewToken(token, sessionId, { secret }) : true),
+      // Require a valid, session-scoped token (no tokenless bypass). The sidebar
+      // widget and the inline card both fetch one from /token first (SEC-6/8).
+      verifyToken: (token, sessionId) => verifyLiveViewToken(token ?? '', sessionId, { secret }),
     }),
   );
 
   const routes = createBrowserRoutes({ service, secret, resolveSession });
   prc.server.api.post('/api/ext/browser/token', (req: any) => routes.token(req));
   prc.server.api.get('/api/ext/browser/live/:sessionId', (req: any) => routes.liveView(req));
+  prc.server.api.post('/api/ext/browser/:sessionId/request-login', (req: any) => routes.requestLogin(req));
+  prc.server.api.post('/api/ext/browser/:sessionId/wait', (req: any) => routes.wait(req));
   prc.server.api.post('/api/ext/browser/:sessionId/resume', (req: any) => routes.resume(req));
   prc.server.api.post('/api/ext/browser/:sessionId/navigate', (req: any) => routes.navigate(req));
   prc.server.api.post('/api/ext/browser/:sessionId/snapshot', (req: any) => routes.snapshot(req));

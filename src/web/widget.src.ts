@@ -78,6 +78,19 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext('2d') ?? null;
 
+      // RES-1: re-attach on every (re)connection so the stream survives socket.io
+      // reconnects (each reconnect is a fresh server-side connection).
+      const doAttach = async () => {
+        try {
+          const r = await transport!.attach(sessionId, token);
+          if (disposed) { transport!.detach(r.browserId); return; }
+          browserId = r.browserId;
+          browserIdRef.current = r.browserId;
+          setStatus('live');
+        } catch { if (!disposed) setStatus('error'); }
+      };
+      (socket as any).on?.('connect', doAttach);
+
       transport.onFrame((f) => {
         if (!canvas || !ctx) return;
         const img = new Image();
@@ -95,15 +108,9 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
         if (m.closed) setStatus('closed');
       });
 
-      try {
-        const r = await transport.attach(sessionId, token);
-        if (disposed) { transport.detach(r.browserId); transport.dispose(); return; }
-        browserId = r.browserId;
-        browserIdRef.current = r.browserId;
-        setStatus('live');
-      } catch (e) {
-        if (!disposed) setStatus('error');
-      }
+      // socket.io fires 'connect' on the initial connection too; if it already
+      // connected before we subscribed, attach now.
+      if ((socket as any).connected) await doAttach();
     })();
 
     return () => {

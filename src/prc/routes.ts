@@ -9,6 +9,7 @@
  * the pi-crust HTTP server.
  */
 import type { BrowserService } from '../core/protocol.js';
+import { BrowserError } from '../core/protocol.js';
 import { mintLiveViewToken, verifyLiveViewToken } from '../core/live-view-token.js';
 import { renderLiveCardHtml } from './live-card-html.js';
 
@@ -60,11 +61,41 @@ export function createBrowserRoutes(deps: BrowserRoutesDeps) {
       };
     },
 
-    async resume(req: RouteRequest): Promise<RouteResponse> {
+    // HOFF-1/2: the LLM asks the human to sign in. Ensures a browser, flips the
+    // server into awaiting-human (so viewers show the banner), and returns a
+    // session-scoped token for the inline card.
+    async requestLogin(req: RouteRequest): Promise<RouteResponse> {
       const sessionId = req.params.sessionId;
+      const { reason } = await req.json<{ reason?: string }>().catch(() => ({ reason: undefined }));
       if (!(await deps.resolveSession(sessionId).catch(() => undefined))) {
         return { status: 404, body: { error: `unknown session: ${sessionId}` } };
       }
+      const browserId = await deps.service.openSession(sessionId);
+      deps.service.requestLogin(browserId, reason || 'Sign in to continue');
+      const token = mintLiveViewToken(sessionId, { secret: deps.secret, expiresAt: Date.now() + ttl });
+      return { status: 200, body: { token } };
+    },
+
+    // HOFF-3/4: the LLM blocks here until the human clicks Resume (or timeout).
+    async wait(req: RouteRequest): Promise<RouteResponse> {
+      const sessionId = req.params.sessionId;
+      const { timeoutMs } = await req.json<{ timeoutMs?: number }>().catch(() => ({ timeoutMs: undefined }));
+      if (!deps.service.hasSession(sessionId)) return { status: 200, body: { resumed: false } };
+      const browserId = await deps.service.openSession(sessionId);
+      try {
+        const r = await deps.service.waitForHuman(browserId, { timeoutMs: timeoutMs ?? 10 * 60 * 1000 });
+        return { status: 200, body: r };
+      } catch (e) {
+        const code = e instanceof BrowserError ? e.code : 'ERROR';
+        return { status: 200, body: { resumed: false, reason: code } };
+      }
+    },
+
+    // The human clicked "Done — resume" in the card/sidebar. No browser is
+    // created if none exists (avoids spurious Chromiums).
+    async resume(req: RouteRequest): Promise<RouteResponse> {
+      const sessionId = req.params.sessionId;
+      if (!deps.service.hasSession(sessionId)) return { status: 200, body: { resumed: false } };
       const browserId = await deps.service.openSession(sessionId);
       const r = deps.service.resume(browserId);
       return { status: 200, body: r };

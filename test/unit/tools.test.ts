@@ -50,10 +50,18 @@ describe('LLM tools', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('browser_wait_for_human RPCs to resume and reports the result', async () => {
+  it('HOFF-2: browser_request_login calls /request-login and returns a token-scoped card url', async () => {
+    vi.stubGlobal('fetch', async (u: string, init: any) => { calls.push({ url: String(u), body: init?.body ? JSON.parse(init.body) : undefined }); return { ok: true, json: async () => ({ token: 'tok-1' }) } as any; });
+    const t = collectTools().get('browser_request_login');
+    const out = await t.execute('id', { reason: 'GitHub' }, { sessionId: 'pi-1' });
+    expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-1/request-login');
+    expect(out.details.piRemoteControlArtifact.url).toContain('tok-1');
+  });
+
+  it('HOFF-3: browser_wait_for_human blocks on /wait (not /resume) and reports the result', async () => {
     const t = collectTools().get('browser_wait_for_human');
-    const out = await t.execute('id', {}, { sessionId: 'pi-1' });
-    expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-1/resume');
+    const out = await t.execute('id', { timeoutMs: 5000 }, { sessionId: 'pi-1' });
+    expect(calls[0].url).toBe('http://test-host:9999/api/ext/browser/pi-1/wait');
     expect(out.content[0].text).toMatch(/signed in/i);
   });
 });

@@ -74,6 +74,13 @@ export interface BrowserServiceOptions {
   readonly maxSessions?: number;
   readonly jpegQuality?: number;
   readonly maxWidth?: number;
+  /** Close a browser with no viewers + no activity for this long (LIFE-5).
+   *  Default 5 min. Set 0 to disable the reaper. */
+  readonly idleMs?: number;
+  /** How often the idle reaper sweeps (default 30s). */
+  readonly reapIntervalMs?: number;
+  /** Injectable clock for deterministic reaper tests. */
+  readonly now?: () => number;
 }
 
 export interface BrowserService {
@@ -99,6 +106,10 @@ export interface BrowserService {
   cancel(browserId: string): void;
   /** LIFE-3: dispose the browser for a pi session (no orphans). */
   closeSession(piSessionId: string): Promise<void>;
+  /** Whether a browser already exists for this pi session (no side effects). */
+  hasSession(piSessionId: string): boolean;
+  /** Stop the idle reaper + close all browsers (call on extension teardown). */
+  dispose(): Promise<void>;
 
   // --- test/introspection seams ---
   isScreencasting(browserId: string): boolean;

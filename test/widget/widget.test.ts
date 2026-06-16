@@ -19,6 +19,7 @@ function makeFakeSocket() {
   const handlers = new Map<string, (p: any) => void>();
   return {
     emitted: [] as { event: string; payload: any }[],
+    connected: true,
     on(e: string, h: (p: any) => void) { handlers.set(e, h); },
     emit(e: string, p: any, ack?: (r: any) => void) {
       this.emitted.push({ event: e, payload: p });
