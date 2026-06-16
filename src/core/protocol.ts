@@ -100,6 +100,8 @@ export interface BrowserService {
   reload(browserId: string): Promise<void>;
   /** Go back one entry in history (no-op if none). */
   goBack(browserId: string): Promise<void>;
+  /** Match the remote render to the viewer (size, mobile layout, touch). */
+  setViewport(browserId: string, vp: { width: number; height: number; mobile?: boolean; deviceScaleFactor?: number }): Promise<void>;
   /** TOOL-4: model-safe page snapshot (url/title/text); never includes secrets. */
   snapshot(browserId: string): Promise<{ url: string; title: string; text: string }>;
   /** HOFF-1/2: enter awaiting-human state. */

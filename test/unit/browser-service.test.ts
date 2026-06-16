@@ -22,6 +22,17 @@ describe('BrowserService — lifecycle', () => {
     expect(cdpFactory.sessions.size).toBe(1);
   });
 
+  it('setViewport: emulates device metrics + touch for the remote', async () => {
+    const { service, cdpFactory } = setup();
+    const id = await service.openSession('pi-1');
+    await service.setViewport(id, { width: 390, height: 780, mobile: true, deviceScaleFactor: 2 });
+    const cdp = cdpFactory.sessions.get('pi-1')!;
+    const dm = cdp.callsTo('Emulation.setDeviceMetricsOverride');
+    expect(dm).toHaveLength(1);
+    expect(dm[0].params).toMatchObject({ width: 390, height: 780, mobile: true, deviceScaleFactor: 2 });
+    expect(cdp.callsTo('Emulation.setTouchEmulationEnabled')).toHaveLength(1);
+  });
+
   it('home: a new browser navigates to the configured home URL', async () => {
     const cdpFactory = new FakeCdpFactory();
     const service = createBrowserService({ cdpFactory, homeUrl: 'https://www.google.com/' });

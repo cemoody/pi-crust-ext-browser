@@ -18,9 +18,12 @@ export interface AttachResult {
   viewport?: { width: number; height: number };
 }
 
+export interface Viewport { width: number; height: number; mobile?: boolean; deviceScaleFactor?: number }
+
 export interface BrowserGatewayTransport {
-  attach(sessionId: string, token?: string): Promise<AttachResult>;
+  attach(sessionId: string, token?: string, viewport?: Viewport): Promise<AttachResult>;
   input(browserId: string, event: Record<string, unknown>): void;
+  resize(browserId: string, viewport: Viewport): void;
   detach(browserId: string): void;
   onFrame(cb: (f: FrameEnvelope) => void): () => void;
   onMeta(cb: (m: MetaEnvelope) => void): () => void;
@@ -54,10 +57,13 @@ export function createGatewayTransport(socket: GatewaySocket, opts?: { ackTimeou
     });
 
   return {
-    async attach(sessionId, token) {
-      const ack = await emitWithAck('browser:attach', { sessionId, token });
+    async attach(sessionId, token, viewport) {
+      const ack = await emitWithAck('browser:attach', { sessionId, token, viewport });
       if (!ack?.ok || !ack.browserId) throw new Error(ack?.error ?? 'browser:attach failed');
       return { browserId: ack.browserId, viewport: ack.viewport };
+    },
+    resize(browserId, viewport) {
+      socket.emit('browser:resize', { browserId, viewport });
     },
     input(browserId, event) {
       if (coalescer) { currentBrowserId = browserId; coalescer.push(event); return; }

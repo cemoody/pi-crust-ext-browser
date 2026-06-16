@@ -64,8 +64,11 @@ describe('widget (React/DOM)', () => {
     await renderWidget(apiWithSession);
     const attach = fakeSocket.emitted.find((e: any) => e.event === 'browser:attach');
     expect(attach).toBeTruthy();
-    // Sidebar attaches tokenless (trusted same-origin host page).
+    // Sidebar attaches tokenless (trusted same-origin host page) + sends its
+    // viewport so the remote render matches the display.
     expect(attach.payload).toMatchObject({ sessionId: 'pi-1' });
+    expect(typeof attach.payload.viewport?.width).toBe('number');
+    expect(typeof attach.payload.viewport?.height).toBe('number');
   });
 
   it('STR-1: a browser:frame draws to the canvas', async () => {

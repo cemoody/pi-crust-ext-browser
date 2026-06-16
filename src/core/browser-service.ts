@@ -220,6 +220,18 @@ export function createBrowserService(options: BrowserServiceOptions): BrowserSer
       await s.cdp.send('Page.navigate', { url });
     },
 
+    async setViewport(browserId, vp): Promise<void> {
+      const s = require(browserId);
+      touch(s);
+      const width = Math.max(1, Math.round(vp.width));
+      const height = Math.max(1, Math.round(vp.height));
+      const deviceScaleFactor = vp.deviceScaleFactor && vp.deviceScaleFactor > 0 ? vp.deviceScaleFactor : 1;
+      const mobile = !!vp.mobile;
+      await s.cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor, mobile });
+      // Touch emulation so mobile sites use tap/scroll behavior.
+      await s.cdp.send('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: mobile ? 5 : 0 }).catch(() => {});
+    },
+
     async reload(browserId: string): Promise<void> {
       const s = require(browserId);
       touch(s);

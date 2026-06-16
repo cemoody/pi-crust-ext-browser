@@ -69,6 +69,17 @@ describe('browser:* gateway', () => {
     expect(b.emittedOf('browser:frame')).toHaveLength(0);
   });
 
+  it('attach with a viewport emulates it on the remote; browser:resize re-emulates', async () => {
+    const { handler, cdpFactory } = setup();
+    const conn = new FakeRealtimeConnection('sock-A');
+    handler(conn);
+    const ack = await conn.send('browser:attach', { sessionId: 'pi-1', token: 'good', viewport: { width: 400, height: 800, mobile: true, deviceScaleFactor: 2 } });
+    const cdp = cdpFactory.sessions.get('pi-1')!;
+    expect(cdp.callsTo('Emulation.setDeviceMetricsOverride')).toHaveLength(1);
+    await conn.send('browser:resize', { browserId: ack.browserId, viewport: { width: 500, height: 900, mobile: true, deviceScaleFactor: 2 } });
+    expect(cdp.callsTo('Emulation.setDeviceMetricsOverride')).toHaveLength(2);
+  });
+
   it('GW-2: the disconnect disposer detaches the socket’s browsers (no leak)', async () => {
     const { handler, service, cdpFactory } = setup();
     const conn = new FakeRealtimeConnection('sock-A');

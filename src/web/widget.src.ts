@@ -42,6 +42,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   const React = hostProps.React;
   const { useEffect, useRef, useState } = React;
   const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
   const kbRef = useRef(null);
   const gestureRef = useRef({ sx: 0, sy: 0, lx: 0, ly: 0, px: 0, py: 0, moved: false, touch: false });
   const pressedRef = useRef(false);
@@ -54,7 +55,10 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   const editingRef = useRef(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [awaiting, setAwaiting] = useState(null);
-  const [maximized, setMaximized] = useState(false);
+  // Auto-maximize on touch devices: a sidebar-sized panel is too small to use
+  // a browser on a phone, so fill the screen by default (restore button remains).
+  const isCoarse = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  const [maximized, setMaximized] = useState(isCoarse);
   const sessionIdRef = useRef(null);
 
   useEffect(() => {
@@ -83,7 +87,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       // reconnects (each reconnect is a fresh server-side connection).
       const doAttach = async () => {
         try {
-          const r = await transport!.attach(sessionId);
+          const r = await transport!.attach(sessionId, undefined, measureViewport() ?? undefined);
           if (disposed) { transport!.detach(r.browserId); return; }
           browserId = r.browserId;
           browserIdRef.current = r.browserId;
@@ -131,11 +135,41 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     const { w, h } = sizeRef.current;
     return { x: Math.round((ev.clientX - r.left) * (w / r.width)), y: Math.round((ev.clientY - r.top) * (h / r.height)) };
   };
+  // Keep the remote viewport in sync with the displayed area (maximize, rotate,
+  // window resize). Debounced; only when attached.
+  useEffect(() => {
+    const el = wrapRef.current as any;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    let t: any = null;
+    const push = () => {
+      const id = browserIdRef.current; const t2 = transportRef.current as any; const vp = measureViewport();
+      if (id && t2 && vp) t2.resize(id, vp);
+    };
+    const ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(push, 200); });
+    ro.observe(el);
+    return () => { clearTimeout(t); ro.disconnect(); };
+  }, [maximized]);
+
   // Input targets the live transport+browser via refs (no re-subscription).
   const send = (ev: Record<string, unknown>) => {
     const t = transportRef.current;
     const id = browserIdRef.current;
     if (t && id) t.input(id, ev);
+  };
+
+  // Measure the on-screen display area so the remote render matches it (size +
+  // mobile layout), instead of shrinking a 1280px desktop page to a strip.
+  const measureViewport = () => {
+    const el = wrapRef.current as any;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+    return {
+      width: Math.max(320, Math.round(r.width)),
+      height: Math.max(240, Math.round(r.height)),
+      mobile: isCoarse || r.width < 700,
+      deviceScaleFactor: dpr,
+    };
   };
 
   // Summon the on-screen keyboard by focusing the hidden textarea (mobile can
@@ -237,7 +271,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     // Header padded to clear the host's floating corner controls (sidebar
     // toggle on the left, menu on the right) — important on mobile where they
     // overlay the panel. The URL field is a rounded search pill.
-    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '8px 8px', paddingLeft: 58, paddingRight: 50, minHeight: 52, boxSizing: 'border-box', color: '#202124', font: '13px system-ui', borderBottom: '1px solid #dadce0', background: '#f1f3f4' } },
+    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, padding: '8px 8px', paddingLeft: maximized ? 12 : 58, paddingRight: maximized ? 12 : 50, paddingTop: maximized ? 'calc(8px + env(safe-area-inset-top, 0px))' : 8, minHeight: 52, boxSizing: 'border-box', color: '#202124', font: '13px system-ui', borderBottom: '1px solid #dadce0', background: '#f1f3f4' } },
       React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 14px', background: '#fff', border: '1px solid #dadce0', borderRadius: 999, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)' } },
         React.createElement('span', { 'data-testid': 'status-dot', title: status, style: { flexShrink: 0, width: 9, height: 9, borderRadius: '50%', background: dot, display: 'inline-block' } }),
         React.createElement('span', { 'aria-hidden': 'true', style: { flexShrink: 0, opacity: 0.55, fontSize: 13 } }, '🔍'),
@@ -272,7 +306,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
       onKeyDown: onKbKeyDown, onKeyUp: onKbKeyUp, onBeforeInput: onKbBeforeInput, onInput: (e: any) => { e.target.value = ''; },
       style: { position: 'absolute', opacity: 0, width: 1, height: 1, padding: 0, border: 0, left: 2, bottom: 2, resize: 'none' },
     }),
-    React.createElement('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' } },
+    React.createElement('div', { ref: wrapRef, style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' } },
       React.createElement('canvas', {
         ref: canvasRef, width: 1280, height: 800, 'aria-label': 'Remote browser viewport',
         style: { maxWidth: '100%', maxHeight: '100%', background: '#fff', cursor: 'crosshair', boxShadow: '0 0 0 1px #333', touchAction: 'none' },

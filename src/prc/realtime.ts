@@ -83,6 +83,11 @@ export function makeBrowserConnectionHandler(
           const browserId = await service.openSession(sessionId);
           await service.attach(browserId, makeViewer());
           owned.add(browserId);
+          // Match the remote render to the viewer if it sent its size.
+          const vp = (p as any).viewport;
+          if (vp && typeof vp.width === 'number' && typeof vp.height === 'number') {
+            await service.setViewport(browserId, vp).catch(() => {});
+          }
           ack(cb, { ok: true, browserId, viewport: { width: 1280, height: 800 } });
         } catch (e) {
           ack(cb, { ok: false, error: errOf(e) });
@@ -106,6 +111,17 @@ export function makeBrowserConnectionHandler(
         } catch (e) {
           ack(cb, { ok: false, error: errOf(e) });
         }
+      })();
+    });
+
+    conn.on('browser:resize', (payload, cb) => {
+      void (async () => {
+        const p = rec(payload);
+        const browserId = str(p.browserId);
+        if (!browserId || !owned.has(browserId)) { ack(cb, { ok: false, error: 'not attached to that browser' }); return; }
+        const vp = (p as any).viewport ?? p;
+        try { await service.setViewport(browserId, { width: Number(vp.width), height: Number(vp.height), mobile: !!vp.mobile, deviceScaleFactor: Number(vp.deviceScaleFactor) || 1 }); ack(cb, { ok: true }); }
+        catch (e) { ack(cb, { ok: false, error: errOf(e) }); }
       })();
     });
 
