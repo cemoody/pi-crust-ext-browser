@@ -1,0 +1,58 @@
+{
+  "name": "@cemoody/pi-crust-ext-browser",
+  "version": "0.0.1",
+  "description": "Live remote-browser widget for pi-crust: the LLM drives a remote Chromium via CDP while a human can watch and type credentials inline.",
+  "license": "MIT",
+  "author": "cemoody",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "pi": {
+    "extensions": ["./src/pi/index.ts"]
+  },
+  "piCrust": {
+    "extension": "./src/prc/server.ts",
+    "web": "./src/web/widget.mjs"
+  },
+  "piRemoteControl": {
+    "extension": "./src/prc/server.ts",
+    "web": "./src/web/widget.mjs"
+  },
+  "files": [
+    "src",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-crust",
+    "pi-crust-extension",
+    "pi.dev",
+    "browser",
+    "playwright",
+    "cdp",
+    "remote-browser",
+    "screencast"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cemoody/pi-crust-ext-browser.git"
+  },
+  "homepage": "https://github.com/cemoody/pi-crust-ext-browser#readme",
+  "bugs": {
+    "url": "https://github.com/cemoody/pi-crust-ext-browser/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0"
+  }
+}
