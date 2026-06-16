@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { fireEvent } from '@testing-library/react';
 
 // --- controllable fake socket.io ------------------------------------------
 let fakeSocket: any;
@@ -76,7 +77,7 @@ describe('widget (React/DOM)', () => {
   it('STR-5: browser:meta updates the url bar', async () => {
     await renderWidget(apiWithSession);
     await act(async () => { fakeSocket.fire('browser:meta', { browserId: 'br-1', url: 'https://example.com/' }); });
-    expect(container.querySelector('[data-testid=url]')!.textContent).toContain('example.com');
+    expect((container.querySelector('[data-testid=url]') as HTMLInputElement).value).toContain('example.com');
   });
 
   it('HOFF-6: awaitingHuman shows the banner; Resume POSTs and clears it', async () => {
@@ -109,6 +110,21 @@ describe('widget (React/DOM)', () => {
     root = createRoot(container);
   });
 
+  it('address bar: typing a URL + Enter navigates the attached browser', async () => {
+    const calls: { url: string; body: any }[] = [];
+    vi.stubGlobal('fetch', async (u: string, init: any) => { calls.push({ url: String(u), body: init?.body ? JSON.parse(init.body) : undefined }); return { ok: true, json: async () => ({ ok: true }) } as any; });
+    await renderWidget(apiWithSession);
+    const input = container.querySelector('[data-testid=url]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'example.com' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const nav = calls.find((c) => c.url.includes('/navigate'));
+    expect(nav).toBeTruthy();
+    expect(nav!.body).toEqual({ url: 'https://example.com' });
+  });
+
   it('error: a failed attach shows the error banner with the message', async () => {
     fakeSocket.emit = function (e: string, p: any, ack?: (r: any) => void) {
       this.emitted.push({ event: e, payload: p });
@@ -124,6 +140,6 @@ describe('widget (React/DOM)', () => {
   it('no-session: with no sessions, shows the no-session state and never attaches', async () => {
     await renderWidget({ listSessions: async () => [] });
     expect(fakeSocket.emitted.some((e: any) => e.event === 'browser:attach')).toBe(false);
-    expect(container.textContent).toContain('no-session');
+    expect((container.querySelector('[data-testid=url]') as HTMLInputElement).placeholder).toContain('no-session');
   });
 });

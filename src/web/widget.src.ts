@@ -17,6 +17,12 @@ export function renderActivity(props: any) {
 export default renderActivity;
 
 async function resolveSessionId(api: any): Promise<string | null> {
+  // Prefer the session in the page URL (?session=…) so the panel matches the
+  // session the user is viewing.
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get('session');
+    if (fromUrl) return fromUrl;
+  } catch { /* fall through */ }
   try {
     if (typeof api?.getActiveSessionId === 'function') {
       const id = await api.getActiveSessionId();
@@ -41,6 +47,8 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   const browserIdRef = useRef(null);
   const [status, setStatus] = useState('connecting');
   const [url, setUrl] = useState('');
+  const [urlInput, setUrlInput] = useState('');
+  const editingRef = useRef(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [awaiting, setAwaiting] = useState(null);
   const [maximized, setMaximized] = useState(false);
@@ -96,7 +104,7 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
         img.src = 'data:image/jpeg;base64,' + f.jpegB64;
       });
       transport.onMeta((m) => {
-        if (m.url) setUrl(m.url);
+        if (m.url) { setUrl(m.url); if (!editingRef.current) setUrlInput(m.url); }
         if (m.awaitingHuman) setAwaiting({ reason: m.reason || 'Sign in to continue' });
         else if (m.awaitingHuman === false) setAwaiting(null);
         if (m.closed) setStatus('closed');
@@ -137,6 +145,16 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     ev.preventDefault();
   };
 
+  // Address bar: navigate the browser THIS widget is attached to.
+  const navigateTo = async (raw: string) => {
+    const id = sessionIdRef.current;
+    if (!id) return;
+    let target = (raw || '').trim();
+    if (!target) return;
+    if (!/^[a-z]+:\/\//i.test(target)) target = 'https://' + target;
+    try { await fetch(`/api/ext/browser/${encodeURIComponent(id)}/navigate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: target }) }); } catch { /* ignore */ }
+  };
+
   // HOFF-6: clicking Resume tells the server the human is done signing in.
   const resume = async () => {
     const id = sessionIdRef.current;
@@ -153,8 +171,16 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
   return React.createElement('div', { className: 'pi-browser-widget', style: rootStyle, role: 'region', 'aria-label': 'Live remote browser' },
     React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', color: '#ddd', font: '12px system-ui', borderBottom: '1px solid #333' } },
       React.createElement('span', { 'data-testid': 'status-dot', style: { width: 8, height: 8, borderRadius: '50%', background: dot, display: 'inline-block' } }),
-      React.createElement('b', null, '🌐 Browser'),
-      React.createElement('span', { 'data-testid': 'url', style: { flex: 1, opacity: 0.7, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, url || status),
+      React.createElement('b', null, '🌐'),
+      React.createElement('input', {
+        'data-testid': 'url', value: urlInput,
+        placeholder: status === 'live' ? 'Enter a URL and press Enter…' : status,
+        onChange: (e: any) => { editingRef.current = true; setUrlInput(e.target.value); },
+        onFocus: (e: any) => { editingRef.current = true; e.target.select(); },
+        onBlur: () => { editingRef.current = false; },
+        onKeyDown: (e: any) => { if (e.key === 'Enter') { editingRef.current = false; void navigateTo(urlInput); e.target.blur(); } e.stopPropagation(); },
+        style: { flex: 1, minWidth: 0, background: '#0d0d12', color: '#ddd', border: '1px solid #444', borderRadius: 4, padding: '3px 8px', font: '12px ui-monospace, monospace', outline: 'none' },
+      }),
       React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: { cursor: 'pointer', background: 'transparent', color: '#ddd', border: '1px solid #444', borderRadius: 4 } }, maximized ? '🗗' : '🗖'),
     ),
     awaiting ? React.createElement('div', { 'data-testid': 'awaiting-banner', role: 'alert', style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#3a2f00', color: '#ffd', font: '12px system-ui' } },
