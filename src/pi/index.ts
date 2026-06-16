@@ -9,6 +9,7 @@
  *
  * Host API typed loosely so the package floats across pi versions.
  */
+import { Type } from 'typebox';
 import { buildLoginArtifact } from '../prc/login-artifact.js';
 
 const apiBase = () => process.env.PI_CRUST_API_BASE ?? 'http://127.0.0.1:8787';
@@ -28,13 +29,11 @@ async function rpc(path: string, body: unknown): Promise<any> {
 }
 
 export default function browserPiExtension(pi: any): void {
-  const obj = (props: Record<string, unknown> = {}) => ({ type: 'object', properties: props, additionalProperties: true });
-
   pi.registerTool?.({
     name: 'browser_open',
     label: 'Open browser',
     description: 'Open/ensure the live remote browser for this session and optionally navigate to a URL.',
-    parameters: obj({ url: { type: 'string' } }),
+    parameters: Type.Object({ url: Type.Optional(Type.String({ description: 'URL to open (https:// added if omitted).' })) }),
     async execute(_id: string, params: any, ctx: any) {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
@@ -47,7 +46,7 @@ export default function browserPiExtension(pi: any): void {
     name: 'browser_navigate',
     label: 'Navigate browser',
     description: 'Navigate the live remote browser to a URL.',
-    parameters: obj({ url: { type: 'string' } }),
+    parameters: Type.Object({ url: Type.String({ description: 'URL to navigate to.' }) }),
     async execute(_id: string, params: any, ctx: any) {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
@@ -62,7 +61,7 @@ export default function browserPiExtension(pi: any): void {
     label: 'Request login',
     description:
       'Ask the human to sign in: renders a live, interactive browser card inline in the conversation so the user can enter credentials directly. Credentials never pass through the model.',
-    parameters: obj({ reason: { type: 'string' } }),
+    parameters: Type.Object({ reason: Type.Optional(Type.String({ description: 'Why sign-in is needed (shown to the user).' })) }),
     async execute(_id: string, params: any, ctx: any) {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
@@ -79,7 +78,7 @@ export default function browserPiExtension(pi: any): void {
     name: 'browser_snapshot',
     label: 'Snapshot page',
     description: 'Return the current page url/title/visible text (model-safe; secret field values are never included).',
-    parameters: obj({}),
+    parameters: Type.Object({}),
     async execute(_id: string, _params: any, ctx: any) {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
@@ -92,7 +91,7 @@ export default function browserPiExtension(pi: any): void {
     name: 'browser_wait_for_human',
     label: 'Wait for human',
     description: 'Block until the human clicks Resume in the live browser card (after signing in).',
-    parameters: obj({ timeoutMs: { type: 'number' } }),
+    parameters: Type.Object({ timeoutMs: Type.Optional(Type.Number({ description: 'Max ms to wait (default 10 min).' })) }),
     async execute(_id: string, params: any, ctx: any) {
       const sessionId = sessionIdOf(ctx);
       if (!sessionId) throw new Error('no session id available');
