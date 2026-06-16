@@ -169,19 +169,24 @@ function BrowserViewer({ hostProps }: { hostProps: any }) {
     : { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#15151a' };
 
   return React.createElement('div', { className: 'pi-browser-widget', style: rootStyle, role: 'region', 'aria-label': 'Live remote browser' },
-    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', color: '#ddd', font: '12px system-ui', borderBottom: '1px solid #333' } },
-      React.createElement('span', { 'data-testid': 'status-dot', style: { width: 8, height: 8, borderRadius: '50%', background: dot, display: 'inline-block' } }),
-      React.createElement('b', null, '🌐'),
-      React.createElement('input', {
-        'data-testid': 'url', value: urlInput,
-        placeholder: status === 'live' ? 'Enter a URL and press Enter…' : status,
-        onChange: (e: any) => { editingRef.current = true; setUrlInput(e.target.value); },
-        onFocus: (e: any) => { editingRef.current = true; e.target.select(); },
-        onBlur: () => { editingRef.current = false; },
-        onKeyDown: (e: any) => { if (e.key === 'Enter') { editingRef.current = false; void navigateTo(urlInput); e.target.blur(); } e.stopPropagation(); },
-        style: { flex: 1, minWidth: 0, background: '#0d0d12', color: '#ddd', border: '1px solid #444', borderRadius: 4, padding: '3px 8px', font: '12px ui-monospace, monospace', outline: 'none' },
-      }),
-      React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: { cursor: 'pointer', background: 'transparent', color: '#ddd', border: '1px solid #444', borderRadius: 4 } }, maximized ? '🗗' : '🗖'),
+    // Header padded to clear the host's floating corner controls (sidebar
+    // toggle on the left, menu on the right) — important on mobile where they
+    // overlay the panel. The URL field is a rounded search pill.
+    React.createElement('div', { style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', paddingLeft: 60, paddingRight: 52, minHeight: 52, boxSizing: 'border-box', color: '#202124', font: '13px system-ui', borderBottom: '1px solid #dadce0', background: '#f1f3f4' } },
+      React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 14px', background: '#fff', border: '1px solid #dadce0', borderRadius: 999, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)' } },
+        React.createElement('span', { 'data-testid': 'status-dot', title: status, style: { flexShrink: 0, width: 9, height: 9, borderRadius: '50%', background: dot, display: 'inline-block' } }),
+        React.createElement('span', { 'aria-hidden': 'true', style: { flexShrink: 0, opacity: 0.55, fontSize: 13 } }, '🔍'),
+        React.createElement('input', {
+          'data-testid': 'url', value: urlInput, inputMode: 'url', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false,
+          placeholder: status === 'live' ? 'Search or enter address' : status,
+          onChange: (e: any) => { editingRef.current = true; setUrlInput(e.target.value); },
+          onFocus: (e: any) => { editingRef.current = true; e.target.select(); },
+          onBlur: () => { editingRef.current = false; },
+          onKeyDown: (e: any) => { if (e.key === 'Enter') { editingRef.current = false; void navigateTo(urlInput); e.target.blur(); } e.stopPropagation(); },
+          style: { flex: 1, minWidth: 0, background: 'transparent', color: '#202124', border: 'none', padding: 0, font: '14px system-ui', outline: 'none' },
+        }),
+      ),
+      React.createElement('button', { 'aria-label': maximized ? 'Restore' : 'Maximize', onClick: () => setMaximized(!maximized), style: { flexShrink: 0, width: 36, height: 36, cursor: 'pointer', background: '#fff', color: '#5f6368', border: '1px solid #dadce0', borderRadius: 8, fontSize: 14 } }, maximized ? '🗗' : '🗖'),
     ),
     awaiting ? React.createElement('div', { 'data-testid': 'awaiting-banner', role: 'alert', style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#3a2f00', color: '#ffd', font: '12px system-ui' } },
       React.createElement('span', null, `🔐 Agent is waiting — ${(awaiting as any).reason}`),
